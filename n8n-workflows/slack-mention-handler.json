@@ -1,0 +1,1031 @@
+{
+  "name": "Slack Mention Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-mention",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "slack-mention"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.N8N_DASHBOARD_URL }}/api/plugins/slack/users/{{ $json.body.user }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "get-user-info",
+      "name": "Get User Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $('Webhook').item.json.body;\nconst u = $('Get User Info').item.json?.user || {};\nconst name = u.display_name || u.real_name || u.name || null;\nreturn {\n  json: {\n    channel: e.channel,\n    user: e.user,\n    user_name: name,\n    text: e.text,\n    ts: e.ts,\n    thread_ts: e.thread_ts || e.ts,\n    project: '__CLAUDIO_PROJECT__'\n  }\n};"
+      },
+      "id": "parse",
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-text",
+      "name": "Has Text?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "add",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.channel }}"
+        },
+        "timestamp": "={{ $json.ts }}",
+        "name": "loading"
+      },
+      "id": "loading",
+      "name": "Loading",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1140,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/projects/{{ $('Parse').item.json.project }}/classify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $('Parse').item.json.text }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "classify",
+      "name": "Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.static_response }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-static-response",
+      "name": "Static?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cls = $input.first().json;\nreturn { json: { text: cls.static_response } };"
+      },
+      "id": "format-static",
+      "name": "Format Static",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "remove",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Parse').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Parse').item.json.ts }}",
+        "name": "loading"
+      },
+      "id": "remove-loading-static",
+      "name": "Done Static",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1860,
+        180
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ channel: $('Parse').item.json.channel, text: $('Format Static').item.json.text }, $('Parse').item.json.thread_ts ? { thread_ts: $('Parse').item.json.thread_ts } : {})) }}"
+      },
+      "id": "reply-static",
+      "name": "Reply Static",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2130,
+        180
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-mention-handler', status: 'success', metadata: { type: 'static', channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "record-stats-static",
+      "name": "Stats Static",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2310,
+        180
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Parse').item.json;\nconst cls = $('Static?').item.json;\n\nconst instruction = `[Slack Context]\\n• Channel: ${req.channel}\\n• Thread: ${req.thread_ts}\\n• Guide: 1) Execute immediately if request is clear 2) Check thread/channel if context needed 3) Focus only on request if context is unrelated`;\n\nreturn {\n  json: {\n    ...req,\n    agent: cls.agent || 'general',\n    instruction,\n    user_message: cls.prompt ? `${cls.prompt}\\n\\n${req.text}` : req.text\n  }\n};"
+      },
+      "id": "build-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/projects/{{ $json.project }}/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.user_message, source: 'slack', requester: $json.user, agent: $json.agent, instruction: $json.instruction, metadata: { channel: $json.channel, thread_ts: $json.thread_ts } }) }}",
+        "options": {
+          "timeout": 660000
+        }
+      },
+      "id": "execute",
+      "name": "Execute",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        420
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-status",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/format/mrkdwn",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.result || '' }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "format",
+      "name": "Format",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { text: $json.text, execution_id: $('Success?').item.json.id } };"
+      },
+      "id": "merge-format",
+      "name": "Merge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2310,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "remove",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Parse').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Parse').item.json.ts }}",
+        "name": "loading"
+      },
+      "id": "remove-loading-ok",
+      "name": "Done OK",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ channel: $('Parse').item.json.channel, text: $('Merge').item.json.text }, $('Parse').item.json.thread_ts ? { thread_ts: $('Parse').item.json.thread_ts } : {})) }}"
+      },
+      "id": "reply",
+      "name": "Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2670,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.N8N_API_URL }}/v1/executions/{{ $('Merge').item.json.execution_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ reply_channel: $json.channel, reply_ts: $json.ts }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "set-context",
+      "name": "Set Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2850,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "add",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Reply').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Reply').item.json.ts }}",
+        "name": "+1"
+      },
+      "id": "add-thumbsup",
+      "name": "👍",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3030,
+        250
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "add",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Reply').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Reply').item.json.ts }}",
+        "name": "-1"
+      },
+      "id": "add-thumbsdown",
+      "name": "👎",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3030,
+        350
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-mention-handler', execution_id: $('Merge').item.json.execution_id, status: 'success', duration_ms: $('Execute').item.json.duration_ms, metadata: { agent: $('Build Prompt').item.json.agent, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "record-stats-ok",
+      "name": "Stats OK",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3210,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_URL }}/webhook/user-context",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_id: $('Parse').item.json.user, user_name: $('Parse').item.json.user_name }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "trigger-context",
+      "name": "Update Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3390,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "remove",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Parse').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Parse').item.json.ts }}",
+        "name": "loading"
+      },
+      "id": "remove-loading-err",
+      "name": "Done Err",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2220,
+        540
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "add",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Parse').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Parse').item.json.ts }}",
+        "name": "x"
+      },
+      "id": "add-x",
+      "name": "❌",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        540
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Success?').item.json;\nconst p = $('Build Prompt').item.json;\nconst msg = r.status === 'timeout' ? `:hourglass: Timeout (${p.agent})` : `:x: Error: ${r.error?.message || 'Unknown'}`;\nreturn { json: { text: msg, execution_id: r.id } };"
+      },
+      "id": "err-msg",
+      "name": "Err Msg",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2580,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ channel: $('Parse').item.json.channel, text: $json.text }, $('Parse').item.json.thread_ts ? { thread_ts: $('Parse').item.json.thread_ts } : {})) }}"
+      },
+      "id": "reply-err",
+      "name": "Reply Err",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2760,
+        540
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-mention-handler', execution_id: $json.execution_id, status: $('Success?').item.json.status === 'timeout' ? 'timeout' : 'error', duration_ms: $('Execute').item.json.duration_ms, metadata: { agent: $('Build Prompt').item.json.agent, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user, error: $('Success?').item.json.error?.message } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "record-stats-err",
+      "name": "Stats Err",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2940,
+        540
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "add",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $(\"Parse\").item.json.channel }}"
+        },
+        "timestamp": "={{ $(\"Parse\").item.json.ts }}",
+        "name": "white_check_mark"
+      },
+      "id": "add-check-ok",
+      "name": "✅",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2490,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "add",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $(\"Parse\").item.json.channel }}"
+        },
+        "timestamp": "={{ $(\"Parse\").item.json.ts }}",
+        "name": "white_check_mark"
+      },
+      "id": "add-check-static",
+      "name": "✅ Static",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1950,
+        180
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OK": {
+      "main": [
+        [
+          {
+            "node": "Get User Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Info": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "Has Text?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Text?": {
+      "main": [
+        [
+          {
+            "node": "Loading",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Loading": {
+      "main": [
+        [
+          {
+            "node": "Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify": {
+      "main": [
+        [
+          {
+            "node": "Static?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Static?": {
+      "main": [
+        [
+          {
+            "node": "Format Static",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Static": {
+      "main": [
+        [
+          {
+            "node": "Done Static",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done Static": {
+      "main": [
+        [
+          {
+            "node": "✅ Static",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Static": {
+      "main": [
+        [
+          {
+            "node": "Stats Static",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Execute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute": {
+      "main": [
+        [
+          {
+            "node": "Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success?": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Done Err",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Done OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done OK": {
+      "main": [
+        [
+          {
+            "node": "✅",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply": {
+      "main": [
+        [
+          {
+            "node": "Set Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Context": {
+      "main": [
+        [
+          {
+            "node": "👍",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "👎",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "👍": {
+      "main": [
+        [
+          {
+            "node": "Stats OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stats OK": {
+      "main": [
+        [
+          {
+            "node": "Update Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done Err": {
+      "main": [
+        [
+          {
+            "node": "❌",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "❌": {
+      "main": [
+        [
+          {
+            "node": "Err Msg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err Msg": {
+      "main": [
+        [
+          {
+            "node": "Reply Err",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Err": {
+      "main": [
+        [
+          {
+            "node": "Stats Err",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ Static": {
+      "main": [
+        [
+          {
+            "node": "Reply Static",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}
