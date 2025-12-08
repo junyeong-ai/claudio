@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "claudio-api",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Claudio"]
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+anyhow = "1.0.100"
+uuid = { version = "1.19", features = ["v4", "serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
+
+[profile.release]
+panic = 'abort'
+codegen-units = 1
+opt-level = 'z'
+lto = true
+strip = true

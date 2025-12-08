@@ -1,0 +1,54 @@
+# Rust
+target/
+debug/
+release/
+*.rs.bk
+*.rlib
+*.prof*
+Cargo.lock
+!assistant-api/Cargo.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# Config (use config.example.toml as template)
+config.toml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# SQLite databases
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Test coverage
+coverage/
+*.lcov
+
+# n8n local data
+n8n-workflows/*.bak
+.n8n-config.json
+
+# AI/Agent tooling
+.serena/
+.specify/
+.claude/
+!.claude/skills/
