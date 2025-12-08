@@ -1,0 +1,502 @@
+{
+  "name": "GitLab MR Code Review",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://__GITLAB_HOST__/api/v4/projects/{{ encodeURIComponent('__GITLAB_PROJECT__') }}/merge_requests",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "state",
+              "value": "opened"
+            },
+            {
+              "name": "per_page",
+              "value": "20"
+            },
+            {
+              "name": "order_by",
+              "value": "updated_at"
+            },
+            {
+              "name": "sort",
+              "value": "desc"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-mrs",
+      "name": "Get Open MRs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__GITLAB_CREDENTIAL_ID__",
+          "name": "__GITLAB_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const CONFIG = { GITLAB_HOST: '__GITLAB_HOST__', GITLAB_PROJECT: '__GITLAB_PROJECT__' };\nconst mrs = $input.all().map(i => i.json);\n\nconst toReview = mrs.filter(mr => {\n  const labels = (mr.labels || []);\n  const hasInProgress = labels.includes('ai-review::in-progress');\n  const reviewedSha = labels.find(l => l.startsWith('ai-review::sha:'))?.replace('ai-review::sha:', '');\n  return !hasInProgress && reviewedSha !== mr.sha;\n});\n\nif (toReview.length === 0) return [];\n\nconst mr = toReview[0];\nreturn [{\n  json: {\n    mr_iid: mr.iid,\n    mr_title: mr.title,\n    mr_url: mr.web_url,\n    source_branch: mr.source_branch,\n    target_branch: mr.target_branch,\n    author: mr.author?.username,\n    project_path: CONFIG.GITLAB_PROJECT,\n    gitlab_host: CONFIG.GITLAB_HOST,\n    sha: mr.sha,\n    reviewers: (mr.reviewers || []).map(r => r.name || r.username),\n    labels: mr.labels || []\n  }\n}];"
+      },
+      "id": "filter-mrs",
+      "name": "Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://{{ $json.gitlab_host }}/api/v4/projects/{{ encodeURIComponent($json.project_path) }}/merge_requests/{{ $json.mr_iid }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ add_labels: 'ai-review::in-progress', remove_labels: $json.labels.filter(l => l.startsWith('ai-review::')).join(',') || undefined }) }}",
+        "options": {}
+      },
+      "id": "label-in-progress",
+      "name": "In Progress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__GITLAB_CREDENTIAL_ID__",
+          "name": "__GITLAB_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mr = $('Filter').first().json;\n\nconst formatted_message = `Review MR !${mr.mr_iid}: ${mr.mr_title}\n\n**Branch**: \\`${mr.source_branch}\\` → \\`${mr.target_branch}\\`\n**Author**: ${mr.author}\n**URL**: ${mr.mr_url}`;\n\nreturn { json: { ...mr, formatted_message } };"
+      },
+      "id": "build-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.formatted_message, agent: 'MR Reviewer', source: 'gitlab', requester: $json.author, include_context: false, metadata: { mr_iid: $json.mr_iid, mr_url: $json.mr_url } }) }}",
+        "options": {
+          "timeout": 660000
+        }
+      },
+      "id": "execute-claude",
+      "name": "Execute",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-result",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $env.MR_REVIEW_CHANNEL, text: $('Build Message').item.json.message }) }}"
+      },
+      "id": "post-slack",
+      "name": "Post Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2130,
+        200
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://{{ $('Build Prompt').item.json.gitlab_host }}/api/v4/projects/{{ encodeURIComponent($('Build Prompt').item.json.project_path) }}/merge_requests/{{ $('Build Prompt').item.json.mr_iid }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ add_labels: 'ai-review::done,ai-review::sha:' + $('Build Prompt').item.json.sha, remove_labels: 'ai-review::in-progress' }) }}",
+        "options": {}
+      },
+      "id": "label-done",
+      "name": "Done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2310,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__GITLAB_CREDENTIAL_ID__",
+          "name": "__GITLAB_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'gitlab-mr-review', execution_id: $('Execute').item.json.id, status: 'success', duration_ms: $('Execute').item.json.duration_ms, metadata: { mr_iid: $('Build Prompt').item.json.mr_iid, mr_title: $('Build Prompt').item.json.mr_title } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "record-stats-ok",
+      "name": "Stats OK",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2490,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://{{ $('Build Prompt').item.json.gitlab_host }}/api/v4/projects/{{ encodeURIComponent($('Build Prompt').item.json.project_path) }}/merge_requests/{{ $('Build Prompt').item.json.mr_iid }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ add_labels: 'ai-review::failed', remove_labels: 'ai-review::in-progress' }) }}",
+        "options": {}
+      },
+      "id": "label-failed",
+      "name": "Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__GITLAB_CREDENTIAL_ID__",
+          "name": "__GITLAB_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $env.MR_REVIEW_CHANNEL, text: `:x: *MR Review Failed*\\n<${$('Build Prompt').item.json.mr_url}|!${$('Build Prompt').item.json.mr_iid}> ${$('Build Prompt').item.json.mr_title}\\n${$('Success?').item.json.status === 'timeout' ? ':hourglass: Timeout' : ':warning: ' + ($('Success?').item.json.error?.message || 'Unknown error')}` }) }}"
+      },
+      "id": "notify-failure",
+      "name": "Notify Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        400
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'gitlab-mr-review', execution_id: $('Execute').item.json.id, status: $('Success?').item.json.status === 'timeout' ? 'timeout' : 'error', duration_ms: $('Execute').item.json.duration_ms, metadata: { mr_iid: $('Build Prompt').item.json.mr_iid, error: $('Success?').item.json.error?.message } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "record-stats-err",
+      "name": "Stats Err",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2040,
+        400
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mr = $('Build Prompt').item.json;\nconst executeResult = $('Execute').item.json;\n\nlet review;\ntry {\n  review = JSON.parse(executeResult.result || '{}');\n} catch (e) {\n  review = { verdict: 'error', emoji: ':warning:', summary: 'Failed to parse review', points: [] };\n}\n\nreturn { json: { mr, review, reviewers: mr.reviewers || [] } };"
+      },
+      "id": "parse-review",
+      "name": "Parse Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1590,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Parse Review').item.json;\nconst mr = data.mr;\nconst review = data.review;\nconst reviewers = data.reviewers || [];\nconst dashboardUrl = $env.N8N_DASHBOARD_URL;\n\n// Fetch Slack user IDs for each reviewer\nconst slackMentions = [];\nfor (const reviewer of reviewers) {\n  try {\n    const response = await fetch(\n      `${dashboardUrl}/api/plugins/slack/users?q=${encodeURIComponent(reviewer)}&limit=1`\n    );\n    if (response.ok) {\n      const result = await response.json();\n      if (result.users && result.users.length > 0) {\n        slackMentions.push(`<@${result.users[0].id}>`);\n      } else {\n        slackMentions.push(reviewer);\n      }\n    } else {\n      slackMentions.push(reviewer);\n    }\n  } catch (e) {\n    slackMentions.push(reviewer);\n  }\n}\n\n// Build Slack message\nconst points = (review.points || []).map(p => `• ${p}`).join('\\n');\nconst mentions = slackMentions.join(' ');\nconst message = `:mag: *<${mr.mr_url}|!${mr.mr_iid}>* ${mr.mr_title}\n${review.emoji || ':grey_question:'} ${review.summary || 'No summary'}\n${points}\n${mentions}`.trim();\n\nreturn { json: { message, mr, review } };"
+      },
+      "id": "build-message",
+      "name": "Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1950,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Get Open MRs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Open MRs": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "In Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "In Progress": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Execute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute": {
+      "main": [
+        [
+          {
+            "node": "Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success?": {
+      "main": [
+        [
+          {
+            "node": "Parse Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Slack": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done": {
+      "main": [
+        [
+          {
+            "node": "Stats OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failed": {
+      "main": [
+        [
+          {
+            "node": "Notify Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Failure": {
+      "main": [
+        [
+          {
+            "node": "Stats Err",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Review": {
+      "main": [
+        [
+          {
+            "node": "Build Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Message": {
+      "main": [
+        [
+          {
+            "node": "Post Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

@@ -1,0 +1,326 @@
+{
+  "name": "User Context Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-context",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "user-context"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.N8N_API_URL }}/v1/users/{{ $json.body.user_id }}/context?format=markdown&user_name={{ encodeURIComponent($json.body.user_name || '') }}&acquire_lock=true&lock_id={{ $executionId }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "fetch-context",
+      "name": "Fetch Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.needs_summary === true && $json.lock_acquired === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "should-summarize",
+      "name": "Should Summarize?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.markdown, agent: 'Context Summarizer', source: 'n8n', requester: 'user-context-handler', include_context: false, metadata: { user_id: $json.user_id, user_name: $json.user_name } }) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "summarize",
+      "name": "Summarize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        250
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "summarize-ok",
+      "name": "Summarize OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst ctx = $('Fetch Context').item.json;\n\nlet summary = '';\nlet rules = [];\n\ntry {\n  const m = (r.result || '').match(/```json\\s*([\\s\\S]*?)\\s*```/);\n  if (m) {\n    const parsed = JSON.parse(m[1]);\n    summary = parsed.summary || '';\n    rules = parsed.rules || [];\n  }\n} catch {}\n\nreturn { json: { user_id: ctx.user_id, summary, rules } };"
+      },
+      "id": "parse-result",
+      "name": "Parse Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.N8N_API_URL }}/v1/users/{{ $json.user_id }}/context",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ summary: $json.summary, rules: $json.rules }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "save-context",
+      "name": "Save Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Fetch Context').item.json;\nreturn { json: { success: true, user_id: ctx.user_id, summarized: true } };"
+      },
+      "id": "result-ok",
+      "name": "Result OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Fetch Context').item.json;\nconst reason = ctx.summary_locked ? 'locked' : 'not_needed';\nreturn { json: { success: true, user_id: ctx.user_id, summarized: false, reason } };"
+      },
+      "id": "result-skip",
+      "name": "Result Skip",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $env.N8N_API_URL }}/v1/users/{{ $('Fetch Context').item.json.user_id }}/context/lock",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lock_id: $('Fetch Context').item.json.lock_id }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "release-lock",
+      "name": "Release Lock",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        350
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Fetch Context').item.json;\nreturn { json: { success: false, user_id: ctx.user_id, error: 'summarize_failed' } };"
+      },
+      "id": "result-error",
+      "name": "Result Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Context": {
+      "main": [
+        [
+          {
+            "node": "Should Summarize?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Summarize?": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Summarize OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize OK?": {
+      "main": [
+        [
+          {
+            "node": "Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lock": {
+      "main": [
+        [
+          {
+            "node": "Result Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Result": {
+      "main": [
+        [
+          {
+            "node": "Save Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Context": {
+      "main": [
+        [
+          {
+            "node": "Result OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}
