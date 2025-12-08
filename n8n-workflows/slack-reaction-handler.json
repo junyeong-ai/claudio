@@ -1,0 +1,780 @@
+{
+  "name": "Slack Reaction Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-reaction",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "slack-reaction"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $('Webhook').item.json.body;\nif (e.type !== 'reaction_added') return { json: { skip: true } };\n\nconst r = e.reaction;\nif (!['one', 'two'].includes(r)) return { json: { skip: true } };\n\n// Support both nested (Slack API) and flat (bridge) formats\nconst channel = e.item?.channel || e.channel;\nconst messageTs = e.item?.ts || e.message_ts;\n\nif (!channel || !messageTs) return { json: { skip: true } };\n\nconst action = r === 'one' ? 'jira_only' : 'jira_fix';\nconst jira_prompt = `Create JIRA ticket from Slack message\n\n**Channel**: ${channel}\n**Message TS**: ${messageTs}\n**Requested by**: ${e.user}`;\n\nreturn {\n  json: {\n    skip: false,\n    action,\n    channel,\n    message_ts: messageTs,\n    user: e.user,\n    jira_prompt\n  }\n};"
+      },
+      "id": "parse",
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "valid",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "add",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.channel }}"
+        },
+        "timestamp": "={{ $json.message_ts }}",
+        "name": "loading"
+      },
+      "id": "processing",
+      "name": "Processing",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.jira_prompt, agent: 'JIRA Creator', source: 'slack', requester: $json.user, include_context: false, metadata: { action: $json.action, channel: $json.channel, message_ts: $json.message_ts } }) }}",
+        "options": {
+          "timeout": 200000
+        }
+      },
+      "id": "create-jira",
+      "name": "Create JIRA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const JIRA_HOST = '__JIRA_HOST__';\nconst prev = $('Parse').item.json;\nconst r = $input.first().json;\n\nif (r.status !== 'completed') {\n  return { json: { ...prev, jiraKey: null, jiraUrl: null, error: r.error?.message || 'JIRA creation failed', jira_execution_id: r.id, jira_duration_ms: r.duration_ms } };\n}\n\nconst key = (r.result || '').match(/[A-Z]+-\\d+/)?.[0];\nif (!key) {\n  return { json: { ...prev, jiraKey: null, jiraUrl: null, error: 'JIRA key extraction failed', jira_execution_id: r.id, jira_duration_ms: r.duration_ms } };\n}\n\nconst jiraUrl = `https://${JIRA_HOST}/browse/${key}`;\nconst fix_prompt = `Auto-fix issue and create MR\n\n**JIRA**: <${jiraUrl}|${key}>\n**Channel**: ${prev.channel}\n**Message TS**: ${prev.message_ts}`;\n\nreturn {\n  json: {\n    ...prev,\n    jiraKey: key,\n    jiraUrl,\n    error: null,\n    jira_execution_id: r.id,\n    jira_duration_ms: r.duration_ms,\n    fix_prompt\n  }\n};"
+      },
+      "id": "parse-jira",
+      "name": "Parse JIRA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.jiraKey }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "jira-ok",
+      "name": "JIRA OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "jira_only",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "JIRA Only"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "jira_fix",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "JIRA + Fix"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1680,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: `:jira2: <${$json.jiraUrl}|${$json.jiraKey}> created`, thread_ts: $json.message_ts }) }}"
+      },
+      "id": "reply-jira-only",
+      "name": "Reply JIRA Only",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        150
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "remove",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Parse').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Parse').item.json.message_ts }}",
+        "name": "loading"
+      },
+      "id": "done-jira-only",
+      "name": "Done JIRA Only",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2040,
+        150
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('Route').item.json.jira_execution_id, status: 'success', duration_ms: $('Route').item.json.jira_duration_ms, metadata: { action: 'jira_only', jiraKey: $('Route').item.json.jiraKey, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "stats-jira-only",
+      "name": "Stats JIRA Only",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        150
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.fix_prompt, agent: 'Auto Fixer', source: 'slack', requester: $json.user, include_context: false, metadata: { action: 'jira_fix', jiraKey: $json.jiraKey, jiraUrl: $json.jiraUrl, channel: $json.channel, message_ts: $json.message_ts } }) }}",
+        "options": {
+          "timeout": 660000
+        }
+      },
+      "id": "create-fix",
+      "name": "Create Fix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        350
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Route').item.json;\nconst r = $input.first().json;\n\nlet res = { success: false, autoFixed: false, summary: '', error: '' };\n\nif (r.status !== 'completed') {\n  res.error = r.error?.message || 'API error';\n} else {\n  try {\n    const m = (r.result || '').match(/```json\\s*([\\s\\S]*?)\\s*```/) || (r.result || '').match(/\\{[\\s\\S]*\\}/);\n    if (m) res = { ...res, ...JSON.parse(m[1] || m[0]) };\n  } catch (e) {\n    res.error = 'JSON parsing failed';\n  }\n}\n\nreturn {\n  json: {\n    ...prev,\n    ...res,\n    fix_execution_id: r.id,\n    fix_duration_ms: r.duration_ms,\n    fix_status: r.status\n  }\n};"
+      },
+      "id": "parse-fix",
+      "name": "Parse Fix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "issue",
+        "operation": "update",
+        "issueKey": "={{ $json.jiraKey }}",
+        "updateFields": {
+          "comment": "={{ $json.autoFixed ? `🤖 *Auto-fix completed*\\n\\n*Branch:* \\`${$json.branchName}\\`\\n*MR:* ${$json.mrUrl}\\n\\n*Changes:*\\n${$json.summary}\\n\\n_Draft MR has been created. Please review and merge._` : `🤖 *Auto-analysis completed*\\n\\n*Reason auto-fix not possible:*\\n${$json.error || $json.summary || 'Complexity requires manual handling.'}\\n\\n_Please proceed with manual fix._` }}"
+        }
+      },
+      "id": "jira-comment",
+      "name": "JIRA Comment",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2220,
+        350
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "__JIRA_CREDENTIAL_ID__",
+          "name": "__JIRA_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nlet msg;\n\nif (d.autoFixed && d.mrUrl) {\n  msg = `:white_check_mark: *Auto-fix completed*\\n:jira2: <${d.jiraUrl}|${d.jiraKey}>\\n:gitlab: <${d.mrUrl}|Draft MR>\\n:git: \\`${d.branchName}\\`\\n\\n${d.summary}\\n\\n_Please review and merge._`;\n} else if (d.success && !d.autoFixed) {\n  msg = `:memo: *JIRA created (manual fix required)*\\n:jira2: <${d.jiraUrl}|${d.jiraKey}>\\n\\n${d.summary || d.error || 'Complexity too high for auto-fix.'}\\n\\n_Analysis has been added as a JIRA comment._`;\n} else {\n  msg = `:warning: *Error during processing*\\n:jira2: <${d.jiraUrl}|${d.jiraKey}>\\n\\n${d.error || 'Unknown error'}`;\n}\n\nreturn { json: { ...d, slackMessage: msg } };"
+      },
+      "id": "format-fix",
+      "name": "Format Fix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: $json.slackMessage, thread_ts: $json.message_ts }) }}"
+      },
+      "id": "reply-fix",
+      "name": "Reply Fix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2580,
+        350
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "remove",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Parse').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Parse').item.json.message_ts }}",
+        "name": "loading"
+      },
+      "id": "done-fix",
+      "name": "Done Fix",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2760,
+        350
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('Format Fix').item.json.fix_execution_id, status: $('Format Fix').item.json.fix_status === 'completed' ? 'success' : ($('Format Fix').item.json.fix_status === 'timeout' ? 'timeout' : 'error'), duration_ms: $('Format Fix').item.json.fix_duration_ms, metadata: { action: 'jira_fix', jiraKey: $('Format Fix').item.json.jiraKey, autoFixed: $('Format Fix').item.json.autoFixed, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "stats-fix",
+      "name": "Stats Fix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2940,
+        350
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Parse JIRA').item.json;\nreturn { json: { channel: d.channel, message_ts: d.message_ts, error: d.error, jira_execution_id: d.jira_execution_id, jira_duration_ms: d.jira_duration_ms } };"
+      },
+      "id": "jira-error",
+      "name": "JIRA Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: `:x: ${$json.error}`, thread_ts: $json.message_ts }) }}"
+      },
+      "id": "reply-error",
+      "name": "Reply Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        450
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "remove",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.channel }}"
+        },
+        "timestamp": "={{ $json.message_ts }}",
+        "name": "loading"
+      },
+      "id": "done-error",
+      "name": "Done Error",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2040,
+        450
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "__SLACK_CREDENTIAL_ID__",
+          "name": "__SLACK_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('JIRA Error').item.json.jira_execution_id, status: 'error', duration_ms: $('JIRA Error').item.json.jira_duration_ms, metadata: { action: 'jira_creation_failed', error: $('JIRA Error').item.json.error, channel: $('JIRA Error').item.json.channel } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "stats-error",
+      "name": "Stats Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        450
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OK": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid?": {
+      "main": [
+        [
+          {
+            "node": "Processing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Processing": {
+      "main": [
+        [
+          {
+            "node": "Create JIRA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create JIRA": {
+      "main": [
+        [
+          {
+            "node": "Parse JIRA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JIRA": {
+      "main": [
+        [
+          {
+            "node": "JIRA OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JIRA OK?": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "JIRA Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Reply JIRA Only",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply JIRA Only": {
+      "main": [
+        [
+          {
+            "node": "Done JIRA Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done JIRA Only": {
+      "main": [
+        [
+          {
+            "node": "Stats JIRA Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Fix": {
+      "main": [
+        [
+          {
+            "node": "Parse Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Fix": {
+      "main": [
+        [
+          {
+            "node": "JIRA Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JIRA Comment": {
+      "main": [
+        [
+          {
+            "node": "Format Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Fix": {
+      "main": [
+        [
+          {
+            "node": "Reply Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Fix": {
+      "main": [
+        [
+          {
+            "node": "Done Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done Fix": {
+      "main": [
+        [
+          {
+            "node": "Stats Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JIRA Error": {
+      "main": [
+        [
+          {
+            "node": "Reply Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Error": {
+      "main": [
+        [
+          {
+            "node": "Done Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done Error": {
+      "main": [
+        [
+          {
+            "node": "Stats Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}
