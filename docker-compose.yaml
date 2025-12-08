@@ -1,0 +1,45 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: claudio-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    env_file:
+      - .env
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=${TZ:-UTC}
+      - TZ=${TZ:-UTC}
+      - N8N_RUNNERS_ENABLED=true
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/workflows:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  sqlite-web:
+    image: coleifer/sqlite-web:latest
+    container_name: claudio-sqlite-web
+    profiles:
+      - debug
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./data:/data:ro
+    command: sqlite_web -H 0.0.0.0 /data/claudio.db
+    depends_on:
+      - n8n
+
+volumes:
+  n8n_data:
+    name: claudio-n8n-data

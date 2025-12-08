@@ -1,0 +1,27 @@
+{
+  "credentials": {
+    "slackApi": {
+      "id": "YOUR_SLACK_CREDENTIAL_ID",
+      "name": "Slack account"
+    },
+    "httpHeaderAuth": {
+      "id": "YOUR_GITLAB_CREDENTIAL_ID",
+      "name": "Header Auth account"
+    },
+    "jiraSoftwareCloudApi": {
+      "id": "YOUR_JIRA_CREDENTIAL_ID",
+      "name": "Jira SW Cloud account"
+    }
+  },
+  "workflows": {},
+  "project": "default",
+  "incidentChannels": "",
+  "servicePrefix": "",
+  "gitlab": {
+    "host": "gitlab.example.com",
+    "project": "team/repo"
+  },
+  "jira": {
+    "host": "your-domain.atlassian.net"
+  }
+}
