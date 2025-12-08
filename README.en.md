@@ -1,5 +1,11 @@
 # Claudio
 
+[![Rust](https://img.shields.io/badge/rust-1.91.1%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org)
+[![Next.js](https://img.shields.io/badge/next.js-16-black?style=flat-square&logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/react-19-61dafb?style=flat-square&logo=react)](https://react.dev)
+[![n8n](https://img.shields.io/badge/n8n-workflows-ea4b71?style=flat-square&logo=n8n)](https://n8n.io)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+
 > **English** | **[한국어](README.md)**
 
 **Run AI agents from Slack.** One mention triggers code review, incident analysis, Q&A — Claude Code handles it automatically.
@@ -161,7 +167,19 @@ glab mr view 123
 glab mr diff 123
 ```
 
-**Detailed docs**: [Plugins Guide](docs/PLUGINS.md)
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Plugins Guide](docs/PLUGINS.md) | slack-cli, ssearch, glab integration |
+| [Slack Mention Handler](docs/workflows/slack-mention-handler.md) | @mention processing workflow |
+| [Slack Message Handler](docs/workflows/slack-message-handler.md) | Message monitoring workflow |
+| [Slack Reaction Handler](docs/workflows/slack-reaction-handler.md) | Reaction processing workflow |
+| [Slack Feedback Handler](docs/workflows/slack-feedback-handler.md) | Feedback collection workflow |
+| [User Context Handler](docs/workflows/user-context-handler.md) | User context management |
+| [GitLab MR Review](docs/workflows/gitlab-mr-review.md) | Auto MR review |
 
 ---
 

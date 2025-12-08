@@ -1,5 +1,11 @@
 # Claudio
 
+[![Rust](https://img.shields.io/badge/rust-1.91.1%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org)
+[![Next.js](https://img.shields.io/badge/next.js-16-black?style=flat-square&logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/react-19-61dafb?style=flat-square&logo=react)](https://react.dev)
+[![n8n](https://img.shields.io/badge/n8n-workflows-ea4b71?style=flat-square&logo=n8n)](https://n8n.io)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+
 > **[English](README.en.md)** | **한국어**
 
 **Slack에서 AI 에이전트를 운영하세요.** 멘션 한 번으로 코드 리뷰, 장애 분석, 질의응답까지 — Claude Code가 자동으로 처리합니다.
@@ -161,7 +167,19 @@ glab mr view 123
 glab mr diff 123
 ```
 
-**상세 문서**: [플러그인 가이드](docs/PLUGINS.md)
+---
+
+## 문서
+
+| 문서 | 설명 |
+|------|------|
+| [플러그인 가이드](docs/PLUGINS.md) | slack-cli, ssearch, glab 통합 |
+| [Slack Mention Handler](docs/workflows/slack-mention-handler.md) | @멘션 처리 워크플로우 |
+| [Slack Message Handler](docs/workflows/slack-message-handler.md) | 메시지 모니터링 워크플로우 |
+| [Slack Reaction Handler](docs/workflows/slack-reaction-handler.md) | 리액션 처리 워크플로우 |
+| [Slack Feedback Handler](docs/workflows/slack-feedback-handler.md) | 피드백 수집 워크플로우 |
+| [User Context Handler](docs/workflows/user-context-handler.md) | 사용자 컨텍스트 관리 |
+| [GitLab MR Review](docs/workflows/gitlab-mr-review.md) | MR 자동 리뷰 |
 
 ---
 

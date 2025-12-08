@@ -116,7 +116,9 @@ slack-cli cache refresh  # 캐시 새로고침 (users, channels)
 
 ## ssearch (Semantic Search)
 
-> 시맨틱 검색 기반 에이전트 라우팅 및 코드 검색
+> [github.com/junyeong-ai/semantic-search-cli](https://github.com/junyeong-ai/semantic-search-cli)
+
+시맨틱 검색 기반 에이전트 라우팅 및 코드 검색
 
 ### 소개
 
