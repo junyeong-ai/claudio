@@ -165,6 +165,24 @@ created_at
 // feedback: via reactions table (1=positive, -1=negative)
 ```
 
+### Execution Metadata (JSON)
+```json
+// Slack
+{ "channel", "thread_ts", "reply_ts", "user_name", "workflow_execution_id" }
+
+// GitLab MR
+{ "mr_iid", "mr_url", "author", "source_branch", "target_branch", "workflow_execution_id" }
+
+// JIRA (reaction handler)
+{ "action", "jira_key", "jira_url", "auto_fixed", "workflow_execution_id" }
+```
+
+### UserListItem
+```rust
+user_id, rule_count, has_summary, last_activity?,
+request_count, total_cost_usd, primary_source?
+```
+
 ---
 
 ## Classification Priority
