@@ -69,11 +69,16 @@ pub async fn chat_project(
 ) -> ApiResult<ChatCompletionResponse> {
     let original_user_message = req.user_message.clone();
 
-    let project = state.storage.get_project(&project_id)?.ok_or_else(|| {
-        ApiError::not_found("Project", &project_id)
-    })?;
+    let project = state
+        .storage
+        .get_project(&project_id)?
+        .ok_or_else(|| ApiError::not_found("Project", &project_id))?;
 
-    if state.rate_limit.check(&project_id, project.rate_limit_rpm).is_err() {
+    if state
+        .rate_limit
+        .check(&project_id, project.rate_limit_rpm)
+        .is_err()
+    {
         return Err(ApiError::rate_limit(&project_id));
     }
 

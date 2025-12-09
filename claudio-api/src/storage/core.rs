@@ -192,13 +192,13 @@ impl Storage {
             )
             .unwrap_or(false);
 
-        if !has_enable_user_context {
-            if let Err(e) = conn.execute(
+        if !has_enable_user_context
+            && let Err(e) = conn.execute(
                 "ALTER TABLE projects ADD COLUMN enable_user_context INTEGER NOT NULL DEFAULT 1",
                 [],
-            ) {
-                tracing::warn!(error = %e, "Migration: enable_user_context already exists or failed");
-            }
+            )
+        {
+            tracing::warn!(error = %e, "Migration: enable_user_context already exists or failed");
         }
     }
 
