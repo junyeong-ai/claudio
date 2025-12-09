@@ -108,7 +108,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://{{ $json.gitlab_host }}/api/v4/projects/{{ encodeURIComponent($json.project_path) }}/merge_requests/{{ $json.mr_iid }}/discussions",
+        "url": "=https://{{ $('Filter').first().json.gitlab_host }}/api/v4/projects/{{ encodeURIComponent($('Filter').first().json.project_path) }}/merge_requests/{{ $('Filter').first().json.mr_iid }}/discussions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
