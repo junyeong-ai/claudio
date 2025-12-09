@@ -15,8 +15,10 @@
   },
   "workflows": {},
   "project": "default",
+  "systemProject": "system",
   "incidentChannels": "",
   "servicePrefix": "",
+  "mrReviewChannel": "",
   "gitlab": {
     "host": "gitlab.example.com",
     "project": "team/repo"

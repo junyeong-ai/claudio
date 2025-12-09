@@ -121,7 +121,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst ctx = $('Fetch Context').item.json;\n\nlet summary = '';\nlet rules = [];\n\ntry {\n  const m = (r.result || '').match(/```json\\s*([\\s\\S]*?)\\s*```/);\n  if (m) {\n    const parsed = JSON.parse(m[1]);\n    summary = parsed.summary || '';\n    rules = parsed.rules || [];\n  }\n} catch {}\n\nreturn { json: { user_id: ctx.user_id, summary, rules } };"
+        "jsCode": "const r = $input.first().json;\nconst ctx = $('Fetch Context').item.json;\nconst raw = r.result || '';\n\n// Extract JSON from response (handles code blocks and raw JSON)\nfunction extractJson(text) {\n  const codeBlock = text.match(/```json\\s*([\\s\\S]*?)\\s*```/);\n  if (codeBlock) try { return JSON.parse(codeBlock[1]); } catch {}\n  try { return JSON.parse(text); } catch {}\n  const match = text.match(/\\{[\\s\\S]*\"summary\"[\\s\\S]*\"rules\"[\\s\\S]*\\}/);\n  if (match) try { return JSON.parse(match[0]); } catch {}\n  return null;\n}\n\nconst parsed = extractJson(raw);\nconst summary = parsed?.summary || '';\nconst rules = parsed?.rules || [];\n\nreturn { json: { user_id: ctx.user_id, summary, rules } };"
       },
       "id": "parse-result",
       "name": "Parse Result",

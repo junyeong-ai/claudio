@@ -251,6 +251,8 @@ inject_config() {
     local gitlab_host=$(jq -r '.gitlab.host // "__GITLAB_HOST__"' "$CONFIG_FILE")
     local gitlab_project=$(jq -r '.gitlab.project // "__GITLAB_PROJECT__"' "$CONFIG_FILE")
     local jira_host=$(jq -r '.jira.host // "__JIRA_HOST__"' "$CONFIG_FILE")
+    local mr_review_channel=$(jq -r '.mrReviewChannel // ""' "$CONFIG_FILE")
+    local system_project=$(jq -r '.systemProject // "system"' "$CONFIG_FILE")
 
     # Create temp file with injected values (don't modify original)
     local tmp=$(mktemp)
@@ -276,6 +278,9 @@ inject_config() {
     sed_inplace "s|__GITLAB_HOST__|$gitlab_host|g" "$tmp"
     sed_inplace "s|__GITLAB_PROJECT__|$gitlab_project|g" "$tmp"
     sed_inplace "s|__JIRA_HOST__|$jira_host|g" "$tmp"
+    sed_inplace "s|__CLAUDIO_PROJECT__|$project|g" "$tmp"
+    sed_inplace "s|__SYSTEM_PROJECT__|$system_project|g" "$tmp"
+    sed_inplace "s|__MR_REVIEW_CHANNEL__|$mr_review_channel|g" "$tmp"
 
     if [ -s "$tmp" ]; then
         echo "$tmp"
