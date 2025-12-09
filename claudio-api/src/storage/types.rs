@@ -357,4 +357,8 @@ pub struct UserListItem {
     pub rule_count: i64,
     pub has_summary: bool,
     pub last_activity: Option<i64>,
+    pub request_count: i64,
+    pub total_cost_usd: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary_source: Option<String>,
 }

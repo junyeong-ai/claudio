@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, FileText, ListChecks, Plus, Trash2, ChevronRight, ChevronLeft, RefreshCw, Search, X, SortAsc, SortDesc, Filter, History } from 'lucide-react';
+import { Users, FileText, Plus, Trash2, ChevronRight, ChevronLeft, RefreshCw, Search, X, SortAsc, SortDesc, Filter, History, DollarSign, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useUserList, useUserContext, useExecutionDetail } from '@/hooks/use-stats';
@@ -20,10 +20,10 @@ import { api } from '@/lib/api';
 import { SlackUserBadge } from '@/plugins/slack/components';
 import { isSlackUserId } from '@/plugins/slack/utils';
 import { staggerContainer, staggerItem, transitions } from '@/lib/animations';
-import { formatNumber, formatDateTime } from '@/lib/utils';
+import { formatNumber, formatDateTime, formatCurrency } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/relative-time';
 
-type SortField = 'user_id' | 'rule_count' | 'last_activity';
+type SortField = 'user_id' | 'rule_count' | 'last_activity' | 'request_count' | 'total_cost_usd';
 type SortOrder = 'asc' | 'desc';
 type SummaryFilter = 'all' | 'with' | 'without';
 
@@ -70,6 +70,8 @@ function UsersPageContent() {
       switch (sortField) {
         case 'user_id': comparison = a.user_id.localeCompare(b.user_id); break;
         case 'rule_count': comparison = a.rule_count - b.rule_count; break;
+        case 'request_count': comparison = a.request_count - b.request_count; break;
+        case 'total_cost_usd': comparison = a.total_cost_usd - b.total_cost_usd; break;
         case 'last_activity':
           comparison = (a.last_activity ?? 0) - (b.last_activity ?? 0);
           break;
@@ -131,20 +133,20 @@ function UsersPageContent() {
   };
 
   const stats = useMemo(() => {
-    if (!users) return { total: 0, withSummary: 0, totalRules: 0, avgRules: 0 };
+    if (!users) return { total: 0, withSummary: 0, totalRequests: 0, totalCost: 0 };
     return {
       total: users.length,
       withSummary: users.filter((u) => u.has_summary).length,
-      totalRules: users.reduce((acc, u) => acc + u.rule_count, 0),
-      avgRules: users.length > 0 ? (users.reduce((acc, u) => acc + u.rule_count, 0) / users.length).toFixed(1) : '0',
+      totalRequests: users.reduce((acc, u) => acc + u.request_count, 0),
+      totalCost: users.reduce((acc, u) => acc + u.total_cost_usd, 0),
     };
   }, [users]);
 
   const statCards = [
-    { title: 'Total Users', icon: Users, value: stats.total },
-    { title: 'With Summary', icon: FileText, value: stats.withSummary },
-    { title: 'Total Rules', icon: ListChecks, value: stats.totalRules },
-    { title: 'Avg Rules/User', icon: ListChecks, value: stats.avgRules },
+    { title: 'Total Users', icon: Users, value: formatNumber(stats.total) },
+    { title: 'With Summary', icon: FileText, value: formatNumber(stats.withSummary) },
+    { title: 'Total Requests', icon: MessageSquare, value: formatNumber(stats.totalRequests) },
+    { title: 'Total Cost', icon: DollarSign, value: formatCurrency(stats.totalCost) },
   ];
 
   return (
@@ -169,7 +171,7 @@ function UsersPageContent() {
                 <stat.icon className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {usersLoading ? <Skeleton className="h-8 w-12" /> : <div className="text-2xl font-bold">{formatNumber(typeof stat.value === 'string' ? parseFloat(stat.value) : stat.value)}</div>}
+                {usersLoading ? <Skeleton className="h-8 w-12" /> : <div className="text-2xl font-bold">{stat.value}</div>}
               </CardContent>
             </Card>
           </motion.div>
@@ -202,11 +204,13 @@ function UsersPageContent() {
                     </SelectContent>
                   </Select>
                   <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
-                    <SelectTrigger className="flex-1 sm:w-[130px] h-9"><SelectValue placeholder="Sort by" /></SelectTrigger>
+                    <SelectTrigger className="flex-1 sm:w-[140px] h-9"><SelectValue placeholder="Sort by" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="last_activity">Last activity</SelectItem>
+                      <SelectItem value="request_count">Requests</SelectItem>
+                      <SelectItem value="total_cost_usd">Cost</SelectItem>
                       <SelectItem value="user_id">User ID</SelectItem>
-                      <SelectItem value="rule_count">Rule count</SelectItem>
+                      <SelectItem value="rule_count">Rules</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={toggleSortOrder} aria-label={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}>
@@ -224,7 +228,7 @@ function UsersPageContent() {
               {usersLoading ? (
                 <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-2">
                   {[...Array(5)].map((_, i) => (
-                    <motion.div key={i} variants={staggerItem}><Skeleton className="h-14 w-full" /></motion.div>
+                    <motion.div key={i} variants={staggerItem}><Skeleton className="h-16 w-full" /></motion.div>
                   ))}
                 </motion.div>
               ) : paginatedUsers.length > 0 ? (
@@ -239,15 +243,17 @@ function UsersPageContent() {
                         onClick={() => setSelectedUser(user.user_id)}
                         className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${selectedUser === user.user_id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'}`}
                       >
-                        <div className="flex flex-col items-start gap-1">
+                        <div className="flex flex-col items-start gap-1.5">
                           {isSlackUserId(user.user_id) ? <SlackUserBadge userId={user.user_id} size="sm" clickable={false} /> : <span className="font-mono text-sm">{user.user_id}</span>}
-                          <div className="flex gap-1.5">
-                            <Badge variant="secondary" className="text-xs">{user.rule_count} rule{user.rule_count !== 1 ? 's' : ''}</Badge>
-                            {user.has_summary && <Badge variant="outline" className="text-xs">summary</Badge>}
+                          <div className="flex flex-wrap gap-1.5">
+                            {user.request_count > 0 && <Badge variant="secondary" className="text-xs">{formatNumber(user.request_count)} req</Badge>}
+                            {user.total_cost_usd > 0 && <Badge variant="outline" className="text-xs">{formatCurrency(user.total_cost_usd)}</Badge>}
+                            {user.rule_count > 0 && <Badge variant="secondary" className="text-xs">{user.rule_count} rule{user.rule_count !== 1 ? 's' : ''}</Badge>}
+                            {user.has_summary && <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">summary</Badge>}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {user.last_activity ? <RelativeTime timestamp={user.last_activity} className="text-xs text-muted-foreground" /> : <span className="text-xs text-muted-foreground">-</span>}
+                          {user.last_activity ? <RelativeTime timestamp={user.last_activity} className="text-xs text-muted-foreground" /> : <span className="text-xs text-muted-foreground">No activity</span>}
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         </div>
                       </motion.button>
@@ -274,7 +280,7 @@ function UsersPageContent() {
               ) : (
                 <EmptyState
                   icon={Users}
-                  title={hasFilters ? 'No users match your filters' : 'No users with context yet'}
+                  title={hasFilters ? 'No users match your filters' : 'No users yet'}
                   action={hasFilters ? { label: 'Clear filters', onClick: clearFilters } : undefined}
                   className="py-8"
                 />
@@ -289,7 +295,12 @@ function UsersPageContent() {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   {selectedUser ? (
-                    <>Context: {isSlackUserId(selectedUser) ? <SlackUserBadge userId={selectedUser} size="md" /> : selectedUser}</>
+                    <>
+                      {isSlackUserId(selectedUser) ? <SlackUserBadge userId={selectedUser} size="md" maxWidth="lg" /> : selectedUser}
+                      {users?.find(u => u.user_id === selectedUser)?.primary_source && (
+                        <Badge variant="outline" className="text-xs font-normal">{users.find(u => u.user_id === selectedUser)?.primary_source}</Badge>
+                      )}
+                    </>
                   ) : 'User Context'}
                 </CardTitle>
                 {selectedUser && (
@@ -316,6 +327,27 @@ function UsersPageContent() {
                 </div>
               ) : context ? (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+                  {(() => {
+                    const selectedUserData = users?.find(u => u.user_id === selectedUser);
+                    if (!selectedUserData) return null;
+                    const stats = [
+                      selectedUserData.request_count > 0 && { label: 'Requests', value: formatNumber(selectedUserData.request_count) },
+                      selectedUserData.total_cost_usd > 0 && { label: 'Total Cost', value: formatCurrency(selectedUserData.total_cost_usd) },
+                      selectedUserData.last_activity && { label: 'Last Active', value: <RelativeTime timestamp={selectedUserData.last_activity} /> },
+                    ].filter(Boolean) as { label: string; value: React.ReactNode }[];
+                    if (stats.length === 0) return null;
+                    return (
+                      <div className={`grid gap-4 p-3 bg-muted/30 rounded-lg text-sm text-center ${stats.length === 3 ? 'grid-cols-3' : stats.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        {stats.map((stat) => (
+                          <div key={stat.label} className="flex flex-col">
+                            <span className="text-muted-foreground text-xs">{stat.label}</span>
+                            <span className="font-medium">{stat.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="font-medium">Summary</h3>
@@ -330,8 +362,8 @@ function UsersPageContent() {
                       <p className="text-sm text-muted-foreground italic">No summary yet</p>
                     )}
                     <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                      <span>{formatNumber(context.conversation_count)}/{formatNumber(30)} conversations</span>
-                      <span>{formatNumber(context.context_bytes)}/{formatNumber(8000)} bytes</span>
+                      <span>{formatNumber(context.conversation_count)}/30 conversations</span>
+                      <span>{formatNumber(context.context_bytes)}/8,000 bytes</span>
                       {context.last_summarized_at && <span>Last: <RelativeTime timestamp={context.last_summarized_at} /></span>}
                     </div>
                   </div>
@@ -358,9 +390,9 @@ function UsersPageContent() {
                     </div>
                   </div>
 
-                  {context.recent_conversations.length > 0 && (
-                    <div>
-                      <h3 className="font-medium mb-3">Recent Requests ({formatNumber(context.recent_conversations.length)})</h3>
+                  <div>
+                    <h3 className="font-medium mb-3">Recent Requests ({formatNumber(context.recent_conversations.length)})</h3>
+                    {context.recent_conversations.length > 0 ? (
                       <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-2 max-h-96 overflow-y-auto">
                         {context.recent_conversations.map((conv) => (
                           <motion.button
@@ -380,8 +412,10 @@ function UsersPageContent() {
                           </motion.button>
                         ))}
                       </motion.div>
-                    </div>
-                  )}
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No recent requests</p>
+                    )}
+                  </div>
                 </motion.div>
               ) : null}
             </CardContent>

@@ -205,17 +205,39 @@ impl Storage {
     pub fn list_users_with_context(&self) -> Result<Vec<UserListItem>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT
-                COALESCE(r.user_id, c.user_id) as user_id,
-                COALESCE(r.rule_count, 0) as rule_count,
-                CASE WHEN c.summary IS NOT NULL THEN 1 ELSE 0 END as has_summary,
-                e.last_activity
-             FROM (SELECT user_id, COUNT(*) as rule_count FROM user_rules GROUP BY user_id) r
-             FULL OUTER JOIN user_contexts c ON r.user_id = c.user_id
-             LEFT JOIN (SELECT requester, MAX(created_at) as last_activity FROM executions GROUP BY requester) e
-                ON COALESCE(r.user_id, c.user_id) = e.requester
-             WHERE COALESCE(r.user_id, c.user_id) IS NOT NULL
-             ORDER BY e.last_activity DESC NULLS LAST"
+            "WITH all_users AS (
+                SELECT DISTINCT requester as user_id FROM executions WHERE requester IS NOT NULL
+                UNION
+                SELECT user_id FROM user_rules
+                UNION
+                SELECT user_id FROM user_contexts
+            ),
+            user_sources AS (
+                SELECT requester, source, COUNT(*) as cnt,
+                       ROW_NUMBER() OVER (PARTITION BY requester ORDER BY COUNT(*) DESC) as rn
+                FROM executions
+                WHERE requester IS NOT NULL AND source IS NOT NULL
+                GROUP BY requester, source
+            )
+            SELECT
+                u.user_id,
+                COALESCE(r.rule_count, 0),
+                CASE WHEN c.summary IS NOT NULL THEN 1 ELSE 0 END,
+                e.last_activity,
+                COALESCE(e.request_count, 0),
+                COALESCE(e.total_cost_usd, 0.0),
+                s.source
+            FROM all_users u
+            LEFT JOIN (SELECT user_id, COUNT(*) as rule_count FROM user_rules GROUP BY user_id) r
+                ON u.user_id = r.user_id
+            LEFT JOIN user_contexts c ON u.user_id = c.user_id
+            LEFT JOIN (
+                SELECT requester, MAX(created_at) as last_activity,
+                       COUNT(*) as request_count, COALESCE(SUM(cost_usd), 0) as total_cost_usd
+                FROM executions WHERE requester IS NOT NULL GROUP BY requester
+            ) e ON u.user_id = e.requester
+            LEFT JOIN user_sources s ON u.user_id = s.requester AND s.rn = 1
+            ORDER BY e.last_activity DESC NULLS LAST",
         )?;
 
         let users = stmt
@@ -225,6 +247,9 @@ impl Storage {
                     rule_count: row.get(1)?,
                     has_summary: row.get::<_, i64>(2)? == 1,
                     last_activity: row.get(3)?,
+                    request_count: row.get(4)?,
+                    total_cost_usd: row.get(5)?,
+                    primary_source: row.get(6)?,
                 })
             })?
             .filter_map(|r| r.ok())

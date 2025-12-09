@@ -245,6 +245,9 @@ export interface UserListItem {
   rule_count: number;
   has_summary: boolean;
   last_activity: number | null;
+  request_count: number;
+  total_cost_usd: number;
+  primary_source?: string;
 }
 
 export interface UserContext {
