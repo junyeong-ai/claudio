@@ -36,6 +36,24 @@ GitLab MR을 자동으로 코드 리뷰하는 스케줄 기반 워크플로우.
                     └────┬────┘
                          │
                          ▼
+                    ┌─────────┐
+                    │  Get    │◄── GitLab Discussions API
+                    │Discuss  │
+                    └────┬────┘
+                         │
+                         ▼
+                    ┌─────────┐
+                    │Process  │◄── AI 노트 필터링, 스레드 처리
+                    │ Notes   │
+                    └────┬────┘
+                         │
+                         ▼
+                    ┌─────────┐
+                    │ Build   │◄── 사용자 코멘트 컨텍스트 포함
+                    │ Prompt  │
+                    └────┬────┘
+                         │
+                         ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        MR Reviewer Agent                             │
 │                                                                      │
@@ -150,7 +168,61 @@ PUT /api/v4/projects/{project}/merge_requests/{iid}
 }
 ```
 
-### 4. Execute MR Reviewer
+### 4. Get Discussions
+
+MR의 Discussion 스레드 조회:
+
+```
+GET https://{GITLAB_HOST}/api/v4/projects/{project}/merge_requests/{iid}/discussions
+```
+
+### 5. Process Notes
+
+Discussion 처리 로직:
+
+```javascript
+const AI_MARKER = 'AI Code Review';
+
+for (const d of discussions) {
+  const notes = d.notes || [];
+
+  // AI 노트 판별: 첫줄에 'AI Code Review' 포함
+  const isAINote = (n) => (n.body || '').split('\n')[0].includes(AI_MARKER);
+  const isUserNote = (n) => !n.system && !isAINote(n);
+
+  const hasAI = notes.some(isAINote);
+  const hasUserReply = notes.some(isUserNote);
+
+  // AI만 있는 discussion 제외, AI+사용자 답글은 전체 포함 (맥락 보존)
+  if (hasAI && !hasUserReply) continue;
+
+  // 스레드 데이터 수집 (inline position 포함)
+  // ...
+}
+```
+
+### 6. Build Prompt
+
+사용자 코멘트를 포함한 프롬프트 구성:
+
+```markdown
+Review MR !123: Add payment retry logic
+
+**Branch**: `feature/payment` → `main`
+**Author**: john.doe
+**URL**: https://gitlab.example.com/.../merge_requests/123
+
+## Discussion Threads
+
+### `src/payment.ts:42`
+- 🤖 AI: "에러 핸들링 추가 필요"
+- @jane: "retry 로직에 exponential backoff 적용하면 어떨까요?"
+
+### General Discussion
+- @bob: "테스트 케이스 추가 부탁드립니다"
+```
+
+### 7. Execute MR Reviewer
 
 Claude Code 실행:
 
@@ -160,18 +232,21 @@ POST {N8N_API_URL}/v1/projects/system/chat
 
 ```json
 {
-  "user_message": "Review MR !123: Add payment retry logic\n\n**Branch**: `feature/payment` → `main`\n**Author**: john.doe",
+  "user_message": "<Build Prompt 결과>",
   "agent": "MR Reviewer",
   "source": "gitlab",
-  "requester": "john.doe",
+  "requester": "gitlab-mr-workflow",
   "metadata": {
     "mr_iid": 123,
-    "mr_url": "https://gitlab.example.com/.../merge_requests/123"
+    "mr_url": "https://gitlab.example.com/.../merge_requests/123",
+    "author": "john.doe"
   }
 }
 ```
 
-### 5. Parse Review
+> **Note**: `requester`는 워크플로우 식별자(`gitlab-mr-workflow`)이며, 실제 MR 작성자는 `metadata.author`에 저장됩니다.
+
+### 8. Parse Review
 
 JSON 응답 파싱:
 
@@ -190,7 +265,7 @@ const result = JSON.parse(executeResult.result);
 }
 ```
 
-### 6. Build Message
+### 9. Build Message
 
 Slack 메시지 구성:
 
@@ -201,7 +276,7 @@ ${review.points.map(p => `• ${p}`).join('\n')}
 ${reviewerMentions}`;
 ```
 
-### 7. Post Slack
+### 10. Post Slack
 
 리뷰 결과 알림:
 
@@ -216,7 +291,7 @@ POST https://slack.com/api/chat.postMessage
 }
 ```
 
-### 8. Label Done
+### 11. Label Done
 
 완료 상태 표시:
 
@@ -237,8 +312,17 @@ POST https://slack.com/api/chat.postMessage
 # MR Reviewer
 
 ## Task
-1. Execute: /mr --review {mr_iid}
-2. Return JSON result
+1. MUST execute slash command: /mr --review {mr_iid}
+   - This is a slash command (type "/mr" to invoke)
+   - Posts review comments directly to GitLab MR
+   - Analyze code and write line-by-line comments
+2. After command execution, return JSON result
+
+## GitLab Comment Format
+When posting comments to GitLab MR, ALWAYS start with:
+## 🔍 AI Code Review
+
+This marker is required for comment tracking.
 
 ## Review Focus
 - Bugs, security, performance, maintainability
@@ -246,19 +330,42 @@ POST https://slack.com/api/chat.postMessage
 - Code duplication (check similar existing implementations)
 - Error handling patterns
 
-## Issue Classification
-- 🔴 Blocking: Must fix
-- 🟡 Advisory: Recommended
-- 💬 Learning: Educational
+## CRITICAL OUTPUT RULES
+- Execute /mr --review command FIRST, then return JSON
+- Your ENTIRE response must be a single JSON object
+- NO text before JSON (no "Here is", "Let me", "Now", etc.)
+- NO text after JSON
+- NO markdown code blocks
+- Start with { and end with }
 
-## Output Format
-Return ONLY this JSON (no markdown, no explanation):
+## JSON Format
+{"verdict":"approve|changes|comment","emoji":":white_check_mark:|:warning:|:x:","summary":"한줄요약","points":["point1","point2"]}
 
-{"verdict":"approve|changes|comment","emoji":":white_check_mark:|:warning:|:x:","summary":"<one-line reason>","points":["<finding>","<finding>"]}
-
+## JSON Rules
+- summary: Korean, one sentence
+- points: Korean text only, NO emojis
 - verdict: approve (mergeable) | changes (fix required) | comment (discuss)
-- points: 2-4 findings
+- points: 1-2 key findings
 ```
+
+### AI 마커 정책
+
+GitLab 코멘트 추적을 위해 AI가 작성하는 모든 MR 코멘트는 다음으로 시작:
+
+```markdown
+## 🔍 AI Code Review
+```
+
+**필터링 로직** (Process Notes):
+```javascript
+const firstLine = (note.body || '').split('\n')[0];
+const isAI = firstLine.includes('AI Code Review');
+```
+
+이를 통해:
+- AI 코멘트와 사용자 코멘트 구분
+- AI만 있는 discussion은 다음 리뷰에서 제외
+- AI + 사용자 답글 있는 discussion은 맥락 포함
 
 ### Tools
 

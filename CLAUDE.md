@@ -135,7 +135,8 @@ GET    /v1/config
 ```rust
 id, name, working_dir, system_prompt?,
 allowed_tools?, disallowed_tools?,    // JSON arrays
-is_default, fallback_agent, classify_model, classify_timeout,
+is_default, enable_user_context,      // User context inclusion
+fallback_agent, classify_model, classify_timeout,
 rate_limit_rpm, created_at, updated_at
 ```
 
@@ -212,6 +213,7 @@ n8n env vars: `N8N_API_URL`, `N8N_DASHBOARD_URL`, `N8N_WEBHOOK_URL`, `MR_REVIEW_
 | types.rs | priority | 50 |
 | types.rs | timeout | 300s |
 | types.rs | classify_timeout | 30s |
+| types.rs | enable_user_context | true |
 | config.rs | rate_limit_rpm | 0 (unlimited) |
 
 ---
