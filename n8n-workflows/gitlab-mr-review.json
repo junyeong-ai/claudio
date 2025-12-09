@@ -107,14 +107,51 @@
     },
     {
       "parameters": {
-        "jsCode": "const mr = $('Filter').first().json;\n\nconst formatted_message = `Review MR !${mr.mr_iid}: ${mr.mr_title}\n\n**Branch**: \\`${mr.source_branch}\\` → \\`${mr.target_branch}\\`\n**Author**: ${mr.author}\n**URL**: ${mr.mr_url}`;\n\nreturn { json: { ...mr, formatted_message } };"
+        "method": "GET",
+        "url": "=https://{{ $json.gitlab_host }}/api/v4/projects/{{ encodeURIComponent($json.project_path) }}/merge_requests/{{ $json.mr_iid }}/discussions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-discussions",
+      "name": "Get Discussions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__GITLAB_CREDENTIAL_ID__",
+          "name": "__GITLAB_CREDENTIAL_NAME__"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const AI_MARKER = 'AI Code Review';\nconst mr = $('Filter').first().json;\nconst discussions = $input.all().map(i => i.json);\n\nconst inlineNotes = [];\nconst generalNotes = [];\n\nfor (const d of discussions) {\n  for (const note of d.notes || []) {\n    if (note.system) continue;\n    \n    const firstLine = (note.body || '').split('\\n')[0];\n    if (firstLine.includes(AI_MARKER)) continue;\n    \n    const item = {\n      author: note.author?.username,\n      body: (note.body || '').slice(0, 500)\n    };\n    \n    if (note.type === 'DiffNote' && note.position) {\n      item.file = note.position.new_path || note.position.old_path;\n      item.line = note.position.new_line || note.position.old_line;\n      inlineNotes.push(item);\n    } else {\n      generalNotes.push(item);\n    }\n  }\n}\n\nreturn { json: { ...mr, inlineNotes, generalNotes } };"
+      },
+      "id": "process-notes",
+      "name": "Process Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const mr = $input.first().json;\nconst inline = mr.inlineNotes || [];\nconst general = mr.generalNotes || [];\n\nlet prompt = `Review MR !${mr.mr_iid}: ${mr.mr_title}\\n\\n**Branch**: \\`${mr.source_branch}\\` → \\`${mr.target_branch}\\`\\n**Author**: ${mr.author}\\n**URL**: ${mr.mr_url}`;\n\nif (inline.length > 0) {\n  prompt += '\\n\\n## Inline Comments';\n  for (const n of inline) {\n    prompt += `\\n- \\`${n.file}:${n.line}\\` (@${n.author}): \"${n.body}\"`;\n  }\n}\n\nif (general.length > 0) {\n  prompt += '\\n\\n## Discussion';\n  for (const n of general) {\n    prompt += `\\n- @${n.author}: \"${n.body}\"`;\n  }\n}\n\nprompt += '\\n\\n---\\nYour response MUST start with the following format:\\n## 🔍 AI Code Review';\n\nreturn { json: { ...mr, formatted_message: prompt } };"
       },
       "id": "build-prompt",
       "name": "Build Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1140,
+        1500,
         300
       ]
     },
@@ -134,7 +171,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1320,
+        1680,
         300
       ],
       "onError": "continueRegularOutput"
@@ -167,7 +204,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1500,
+        1860,
         300
       ]
     },
@@ -186,7 +223,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2130,
+        2490,
         200
       ],
       "credentials": {
@@ -212,7 +249,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2310,
+        2670,
         200
       ],
       "credentials": {
@@ -238,7 +275,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2490,
+        2850,
         200
       ],
       "onError": "continueRegularOutput"
@@ -259,7 +296,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1680,
+        2040,
         400
       ],
       "credentials": {
@@ -284,7 +321,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1860,
+        2220,
         400
       ],
       "credentials": {
@@ -310,7 +347,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2040,
+        2400,
         400
       ],
       "onError": "continueRegularOutput"
@@ -324,7 +361,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1590,
+        2040,
         200
       ]
     },
@@ -337,7 +374,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1950,
+        2310,
         200
       ]
     }
@@ -377,6 +414,28 @@
       ]
     },
     "In Progress": {
+      "main": [
+        [
+          {
+            "node": "Get Discussions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Discussions": {
+      "main": [
+        [
+          {
+            "node": "Process Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Notes": {
       "main": [
         [
           {
