@@ -281,7 +281,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/{{ $json.project }}/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.user_message, source: 'slack', requester: $json.user, agent: $json.agent, instruction: $json.instruction, metadata: { channel: $json.channel, thread_ts: $json.thread_ts } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.user_message, source: 'slack', requester: $json.user, agent: $json.agent, instruction: $json.instruction, metadata: { channel: $json.channel, thread_ts: $json.thread_ts, user_name: $json.user_name, workflow_execution_id: $executionId } }) }}",
         "options": {
           "timeout": 660000
         }

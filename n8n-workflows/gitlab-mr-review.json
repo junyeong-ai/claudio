@@ -161,7 +161,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.formatted_message, agent: 'MR Reviewer', source: 'gitlab', requester: 'gitlab-mr-workflow', metadata: { mr_iid: $json.mr_iid, mr_url: $json.mr_url, author: $json.author } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.formatted_message, agent: 'MR Reviewer', source: 'gitlab', requester: 'gitlab-mr-workflow', metadata: { mr_iid: $json.mr_iid, mr_url: $json.mr_url, author: $json.author, source_branch: $json.source_branch, target_branch: $json.target_branch, workflow_execution_id: $executionId } }) }}",
         "options": {
           "timeout": 660000
         }

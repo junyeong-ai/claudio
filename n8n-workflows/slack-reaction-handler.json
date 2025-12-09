@@ -111,7 +111,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.jira_prompt, agent: 'JIRA Creator', source: 'slack', requester: 'slack-reaction-workflow', metadata: { action: $json.action, channel: $json.channel, message_ts: $json.message_ts, triggered_by: $json.user } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.jira_prompt, agent: 'JIRA Creator', source: 'slack', requester: 'slack-reaction-workflow', metadata: { action: $json.action, channel: $json.channel, message_ts: $json.message_ts, triggered_by: $json.user, workflow_execution_id: $executionId } }) }}",
         "options": {
           "timeout": 200000
         }
@@ -286,7 +286,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('Route').item.json.jira_execution_id, status: 'success', duration_ms: $('Route').item.json.jira_duration_ms, metadata: { action: 'jira_only', jiraKey: $('Route').item.json.jiraKey, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('Route').item.json.jira_execution_id, status: 'success', duration_ms: $('Route').item.json.jira_duration_ms, metadata: { action: 'jira_only', jira_key: $('Route').item.json.jiraKey, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
         "options": {
           "timeout": 5000
         }
@@ -307,7 +307,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.fix_prompt, agent: 'Auto Fixer', source: 'slack', requester: 'slack-reaction-workflow', metadata: { action: 'jira_fix', jiraKey: $json.jiraKey, jiraUrl: $json.jiraUrl, channel: $json.channel, message_ts: $json.message_ts, triggered_by: $json.user } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.fix_prompt, agent: 'Auto Fixer', source: 'slack', requester: 'slack-reaction-workflow', metadata: { action: 'jira_fix', jira_key: $json.jiraKey, jira_url: $json.jiraUrl, channel: $json.channel, message_ts: $json.message_ts, triggered_by: $json.user, workflow_execution_id: $executionId } }) }}",
         "options": {
           "timeout": 660000
         }
@@ -432,7 +432,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('Format Fix').item.json.fix_execution_id, status: $('Format Fix').item.json.fix_status === 'completed' ? 'success' : ($('Format Fix').item.json.fix_status === 'timeout' ? 'timeout' : 'error'), duration_ms: $('Format Fix').item.json.fix_duration_ms, metadata: { action: 'jira_fix', jiraKey: $('Format Fix').item.json.jiraKey, autoFixed: $('Format Fix').item.json.autoFixed, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('Format Fix').item.json.fix_execution_id, status: $('Format Fix').item.json.fix_status === 'completed' ? 'success' : ($('Format Fix').item.json.fix_status === 'timeout' ? 'timeout' : 'error'), duration_ms: $('Format Fix').item.json.fix_duration_ms, metadata: { action: 'jira_fix', jira_key: $('Format Fix').item.json.jiraKey, auto_fixed: $('Format Fix').item.json.autoFixed, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
         "options": {
           "timeout": 5000
         }
