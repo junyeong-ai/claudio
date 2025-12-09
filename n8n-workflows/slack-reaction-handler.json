@@ -111,7 +111,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.jira_prompt, agent: 'JIRA Creator', source: 'slack', requester: $json.user, include_context: false, metadata: { action: $json.action, channel: $json.channel, message_ts: $json.message_ts } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.jira_prompt, agent: 'JIRA Creator', source: 'slack', requester: 'slack-reaction-workflow', metadata: { action: $json.action, channel: $json.channel, message_ts: $json.message_ts, triggered_by: $json.user } }) }}",
         "options": {
           "timeout": 200000
         }
@@ -307,7 +307,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.fix_prompt, agent: 'Auto Fixer', source: 'slack', requester: $json.user, include_context: false, metadata: { action: 'jira_fix', jiraKey: $json.jiraKey, jiraUrl: $json.jiraUrl, channel: $json.channel, message_ts: $json.message_ts } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.fix_prompt, agent: 'Auto Fixer', source: 'slack', requester: 'slack-reaction-workflow', metadata: { action: 'jira_fix', jiraKey: $json.jiraKey, jiraUrl: $json.jiraUrl, channel: $json.channel, message_ts: $json.message_ts, triggered_by: $json.user } }) }}",
         "options": {
           "timeout": 660000
         }

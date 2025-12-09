@@ -70,6 +70,7 @@ function ProjectSettingsContent({
     allowedTools: project?.allowed_tools ?? [],
     disallowedTools: project?.disallowed_tools ?? [],
     isDefault: project?.is_default ?? false,
+    enableUserContext: project?.enable_user_context ?? true,
     fallbackAgent: project?.fallback_agent ?? 'general',
     classifyModel: project?.classify_model ?? 'haiku',
     classifyTimeout: project?.classify_timeout ?? 30,
@@ -82,6 +83,7 @@ function ProjectSettingsContent({
   const [allowedTools, setAllowedTools] = useState<string[]>(initialState.allowedTools);
   const [disallowedTools, setDisallowedTools] = useState<string[]>(initialState.disallowedTools);
   const [isDefault, setIsDefault] = useState(initialState.isDefault);
+  const [enableUserContext, setEnableUserContext] = useState(initialState.enableUserContext);
   const [fallbackAgent, setFallbackAgent] = useState(initialState.fallbackAgent);
   const [classifyModel, setClassifyModel] = useState(initialState.classifyModel);
   const [classifyTimeout, setClassifyTimeout] = useState(initialState.classifyTimeout);
@@ -98,6 +100,7 @@ function ProjectSettingsContent({
         allowed_tools: allowedTools.length > 0 ? allowedTools : undefined,
         disallowed_tools: disallowedTools.length > 0 ? disallowedTools : undefined,
         is_default: isDefault || undefined,
+        enable_user_context: enableUserContext,
         fallback_agent: fallbackAgent.trim() || 'general',
         classify_model: classifyModel.trim() || 'haiku',
         classify_timeout: classifyTimeout || 30,
@@ -111,6 +114,7 @@ function ProjectSettingsContent({
         allowed_tools: allowedTools.length > 0 ? allowedTools : undefined,
         disallowed_tools: disallowedTools.length > 0 ? disallowedTools : undefined,
         is_default: isDefault,
+        enable_user_context: enableUserContext,
         fallback_agent: fallbackAgent.trim(),
         classify_model: classifyModel.trim(),
         classify_timeout: classifyTimeout,
@@ -182,26 +186,43 @@ function ProjectSettingsContent({
               </div>
             </div>
 
-            {/* Default Project Checkbox */}
-            <div className="flex items-center space-x-3 p-4 bg-muted/50 rounded-lg">
-              <Checkbox
-                id="is-default"
-                checked={isDefault}
-                onCheckedChange={(checked) => setIsDefault(checked === true)}
-              />
-              <div className="flex-1">
-                <Label htmlFor="is-default" className="text-sm font-medium cursor-pointer">
-                  Set as default project
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Used when no project is specified in API calls
-                </p>
+            {/* Project Options */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center space-x-3 p-4 bg-muted/50 rounded-lg">
+                <Checkbox
+                  id="is-default"
+                  checked={isDefault}
+                  onCheckedChange={(checked) => setIsDefault(checked === true)}
+                />
+                <div className="flex-1">
+                  <Label htmlFor="is-default" className="text-sm font-medium cursor-pointer">
+                    Set as default project
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Used when no project is specified
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3 p-4 bg-muted/50 rounded-lg">
+                <Checkbox
+                  id="enable-user-context"
+                  checked={enableUserContext}
+                  onCheckedChange={(checked) => setEnableUserContext(checked === true)}
+                />
+                <div className="flex-1">
+                  <Label htmlFor="enable-user-context" className="text-sm font-medium cursor-pointer">
+                    Enable user context
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Include user rules and history
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Classification Settings */}
+            {/* Classification */}
             <div className="border rounded-lg p-4 space-y-4">
-              <Label className="text-sm font-medium">Classification Settings</Label>
+              <Label className="text-sm font-medium">Classification</Label>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="fallback-agent" className="text-xs text-muted-foreground">Fallback Agent</Label>
@@ -213,7 +234,7 @@ function ProjectSettingsContent({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="classify-model" className="text-xs text-muted-foreground">Classify Model</Label>
+                  <Label htmlFor="classify-model" className="text-xs text-muted-foreground">Model</Label>
                   <Input
                     id="classify-model"
                     value={classifyModel}
@@ -235,16 +256,9 @@ function ProjectSettingsContent({
             </div>
 
             {/* Rate Limiting */}
-            <div className="border rounded-lg p-4 space-y-4">
-              <div className="flex items-start gap-2">
-                <div className="flex-1">
-                  <Label className="text-sm font-medium">Rate Limiting</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Limit requests per minute. 0 = unlimited.
-                  </p>
-                </div>
-              </div>
-              <div className="w-48">
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center gap-4">
+                <Label htmlFor="rate-limit-rpm" className="text-sm font-medium whitespace-nowrap">Rate Limiting</Label>
                 <Input
                   id="rate-limit-rpm"
                   type="number"
@@ -252,7 +266,9 @@ function ProjectSettingsContent({
                   onChange={(e) => setRateLimitRpm(parseInt(e.target.value) || 0)}
                   placeholder="0"
                   min={0}
+                  className="w-24"
                 />
+                <span className="text-sm text-muted-foreground">requests per minute (0 = unlimited)</span>
               </div>
             </div>
           </TabsContent>

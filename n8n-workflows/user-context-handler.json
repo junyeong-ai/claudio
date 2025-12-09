@@ -73,7 +73,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.markdown, agent: 'Context Summarizer', source: 'n8n', requester: 'user-context-handler', include_context: false, metadata: { user_id: $json.user_id, user_name: $json.user_name } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.markdown, agent: 'Context Summarizer', source: 'n8n', requester: 'user-context-workflow', metadata: { target_user: $json.user_id, user_name: $json.user_name } }) }}",
         "options": {
           "timeout": 90000
         }

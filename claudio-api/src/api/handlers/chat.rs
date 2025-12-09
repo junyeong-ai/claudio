@@ -69,12 +69,11 @@ pub async fn chat_project(
 ) -> ApiResult<ChatCompletionResponse> {
     let original_user_message = req.user_message.clone();
 
-    if let Ok(Some(project)) = state.storage.get_project(&project_id)
-        && state
-            .rate_limit
-            .check(&project_id, project.rate_limit_rpm)
-            .is_err()
-    {
+    let project = state.storage.get_project(&project_id)?.ok_or_else(|| {
+        ApiError::not_found("Project", &project_id)
+    })?;
+
+    if state.rate_limit.check(&project_id, project.rate_limit_rpm).is_err() {
         return Err(ApiError::rate_limit(&project_id));
     }
 
@@ -101,41 +100,39 @@ pub async fn chat_project(
         is_isolated = agent.isolated;
     }
 
-    if let Ok(Some(project)) = state.storage.get_project(&project_id) {
-        if req.working_dir.is_none() {
-            if is_isolated {
-                let config = Config::global();
-                req.working_dir = Some(config.defaults.isolated_dir.clone());
-            } else {
-                req.working_dir = Some(project.working_dir);
-            }
+    if req.working_dir.is_none() {
+        if is_isolated {
+            let config = Config::global();
+            req.working_dir = Some(config.defaults.isolated_dir.clone());
+        } else {
+            req.working_dir = Some(project.working_dir.clone());
         }
-        if req.allowed_tools.is_none() {
-            req.allowed_tools = match (agent_tools, project.allowed_tools) {
-                (Some(agent), Some(project)) => {
-                    let mut merged = agent;
-                    for tool in project {
-                        if !merged.contains(&tool) {
-                            merged.push(tool);
-                        }
+    }
+    if req.allowed_tools.is_none() {
+        req.allowed_tools = match (agent_tools, project.allowed_tools.clone()) {
+            (Some(agent), Some(proj)) => {
+                let mut merged = agent;
+                for tool in proj {
+                    if !merged.contains(&tool) {
+                        merged.push(tool);
                     }
-                    Some(merged)
                 }
-                (Some(agent), None) => Some(agent),
-                (None, Some(project)) => Some(project),
-                (None, None) => None,
-            };
-        }
-        if req.disallowed_tools.is_none() {
-            req.disallowed_tools = project.disallowed_tools;
-        }
-        if req.system_prompt.is_none() {
-            req.system_prompt = project.system_prompt;
-        }
+                Some(merged)
+            }
+            (Some(agent), None) => Some(agent),
+            (None, Some(proj)) => Some(proj),
+            (None, None) => None,
+        };
+    }
+    if req.disallowed_tools.is_none() {
+        req.disallowed_tools = project.disallowed_tools.clone();
+    }
+    if req.system_prompt.is_none() {
+        req.system_prompt = project.system_prompt.clone();
     }
 
     let mut user_context_snapshot: Option<String> = None;
-    if req.include_context
+    if project.enable_user_context
         && let Some(ref requester) = req.requester
         && let Ok(ctx) = state.storage.get_user_context(requester)
     {

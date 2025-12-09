@@ -15,12 +15,13 @@ fn map_project_row(row: &rusqlite::Row) -> rusqlite::Result<Project> {
         allowed_tools: allowed.and_then(|s| serde_json::from_str(&s).ok()),
         disallowed_tools: disallowed.and_then(|s| serde_json::from_str(&s).ok()),
         is_default: row.get::<_, i32>(6)? == 1,
-        fallback_agent: row.get(7)?,
-        classify_model: row.get(8)?,
-        classify_timeout: row.get(9)?,
-        rate_limit_rpm: row.get(10)?,
-        created_at: row.get(11)?,
-        updated_at: row.get(12)?,
+        enable_user_context: row.get::<_, i32>(7)? == 1,
+        fallback_agent: row.get(8)?,
+        classify_model: row.get(9)?,
+        classify_timeout: row.get(10)?,
+        rate_limit_rpm: row.get(11)?,
+        created_at: row.get(12)?,
+        updated_at: row.get(13)?,
     })
 }
 
@@ -52,7 +53,7 @@ impl Storage {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, name, working_dir, system_prompt, allowed_tools, disallowed_tools, is_default,
-                    fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at
+                    enable_user_context, fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at
              FROM projects ORDER BY is_default DESC, name",
         )?;
         let projects = stmt
@@ -67,7 +68,7 @@ impl Storage {
         let result = conn
             .query_row(
                 "SELECT id, name, working_dir, system_prompt, allowed_tools, disallowed_tools, is_default,
-                        fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at
+                        enable_user_context, fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at
                  FROM projects WHERE id = ?1",
                 [id],
                 map_project_row,
@@ -81,7 +82,7 @@ impl Storage {
         let result = conn
             .query_row(
                 "SELECT id, name, working_dir, system_prompt, allowed_tools, disallowed_tools, is_default,
-                        fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at
+                        enable_user_context, fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at
                  FROM projects WHERE is_default = 1 LIMIT 1",
                 [],
                 map_project_row,
@@ -133,10 +134,10 @@ impl Storage {
 
             conn.execute(
                 "INSERT INTO projects (id, name, working_dir, system_prompt, allowed_tools, disallowed_tools, is_default,
-                                       fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                                       enable_user_context, fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 params![id, input.name, input.working_dir, input.system_prompt, allowed, disallowed,
-                        input.is_default as i32, input.fallback_agent, input.classify_model, input.classify_timeout,
+                        input.is_default as i32, input.enable_user_context as i32, input.fallback_agent, input.classify_model, input.classify_timeout,
                         input.rate_limit_rpm, now, now],
             )?;
 
@@ -148,6 +149,7 @@ impl Storage {
                 allowed_tools: input.allowed_tools,
                 disallowed_tools: input.disallowed_tools,
                 is_default: input.is_default,
+                enable_user_context: input.enable_user_context,
                 fallback_agent: input.fallback_agent,
                 classify_model: input.classify_model,
                 classify_timeout: input.classify_timeout,
@@ -215,6 +217,7 @@ impl Storage {
             add_field!("allowed_tools = ?", input.allowed_tools, json);
             add_field!("disallowed_tools = ?", input.disallowed_tools, json);
             add_field!("is_default = ?", input.is_default, bool);
+            add_field!("enable_user_context = ?", input.enable_user_context, bool);
             add_field!("fallback_agent = ?", input.fallback_agent);
             add_field!("classify_model = ?", input.classify_model);
             add_field!("classify_timeout = ?", input.classify_timeout);

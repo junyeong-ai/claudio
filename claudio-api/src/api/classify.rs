@@ -206,7 +206,6 @@ pub async fn classify_with_agents(
         user_message: classification_prompt,
         model: Some(settings.model.clone()),
         timeout: Some(settings.timeout as u64),
-        include_context: false,
         working_dir: Some(global_config.defaults.isolated_dir.clone()),
         ..Default::default()
     };

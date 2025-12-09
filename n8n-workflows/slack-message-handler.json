@@ -111,7 +111,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.formatted_message, agent: 'Incident Analyzer', source: 'slack', requester: 'datadog', include_context: false, metadata: { channel: $json.channel, thread_ts: $json.thread_ts, service: $json.alert.service, env: $json.alert.env } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.formatted_message, agent: 'Incident Analyzer', source: 'slack', requester: 'slack-incident-workflow', metadata: { channel: $json.channel, thread_ts: $json.thread_ts, service: $json.alert.service, env: $json.alert.env, triggered_by: 'datadog' } }) }}",
         "options": {
           "timeout": 330000
         }

@@ -285,11 +285,10 @@ export interface Project {
   allowed_tools?: string[];
   disallowed_tools?: string[];
   is_default: boolean;
-  // Classify settings
+  enable_user_context: boolean;
   fallback_agent: string;
   classify_model: string;
   classify_timeout: number;
-  // Rate limiting
   rate_limit_rpm: number;
   created_at: number;
   updated_at: number;
@@ -320,11 +319,10 @@ export interface CreateProject {
   allowed_tools?: string[];
   disallowed_tools?: string[];
   is_default?: boolean;
-  // Classify settings
+  enable_user_context?: boolean;
   fallback_agent?: string;
   classify_model?: string;
   classify_timeout?: number;
-  // Rate limiting
   rate_limit_rpm?: number;
 }
 
@@ -335,11 +333,10 @@ export interface UpdateProject {
   allowed_tools?: string[];
   disallowed_tools?: string[];
   is_default?: boolean;
-  // Classify settings
+  enable_user_context?: boolean;
   fallback_agent?: string;
   classify_model?: string;
   classify_timeout?: number;
-  // Rate limiting
   rate_limit_rpm?: number;
 }
 

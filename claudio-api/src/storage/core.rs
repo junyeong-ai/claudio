@@ -148,6 +148,7 @@ impl Storage {
                 allowed_tools TEXT,
                 disallowed_tools TEXT,
                 is_default INTEGER NOT NULL DEFAULT 0,
+                enable_user_context INTEGER NOT NULL DEFAULT 1,
                 fallback_agent TEXT NOT NULL DEFAULT 'general',
                 classify_model TEXT NOT NULL DEFAULT 'haiku',
                 classify_timeout INTEGER NOT NULL DEFAULT 30,
@@ -182,7 +183,24 @@ impl Storage {
         Ok(())
     }
 
-    fn run_migrations(_conn: &Connection) {}
+    fn run_migrations(conn: &Connection) {
+        let has_enable_user_context: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('projects') WHERE name = 'enable_user_context'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_enable_user_context {
+            if let Err(e) = conn.execute(
+                "ALTER TABLE projects ADD COLUMN enable_user_context INTEGER NOT NULL DEFAULT 1",
+                [],
+            ) {
+                tracing::warn!(error = %e, "Migration: enable_user_context already exists or failed");
+            }
+        }
+    }
 
     pub fn with_connection<F, T>(&self, f: F) -> Result<T>
     where

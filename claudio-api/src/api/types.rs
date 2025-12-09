@@ -36,8 +36,6 @@ pub struct ChatCompletionRequest {
     pub project: Option<String>,
     #[serde(default)]
     pub requester: Option<String>,
-    #[serde(default = "default_include_context")]
-    pub include_context: bool,
     #[serde(default)]
     pub source: Option<String>,
     #[serde(default)]
@@ -74,10 +72,6 @@ pub struct ChatCompletionRequest {
 
 fn default_timeout() -> Option<u64> {
     Some(300)
-}
-
-fn default_include_context() -> bool {
-    true
 }
 
 #[derive(Debug, Serialize)]

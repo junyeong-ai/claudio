@@ -124,7 +124,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.formatted_message, agent: 'MR Reviewer', source: 'gitlab', requester: $json.author, include_context: false, metadata: { mr_iid: $json.mr_iid, mr_url: $json.mr_url } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.formatted_message, agent: 'MR Reviewer', source: 'gitlab', requester: 'gitlab-mr-workflow', metadata: { mr_iid: $json.mr_iid, mr_url: $json.mr_url, author: $json.author } }) }}",
         "options": {
           "timeout": 660000
         }
@@ -179,7 +179,7 @@
         "nodeCredentialType": "slackApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ channel: $env.MR_REVIEW_CHANNEL, text: $('Build Message').item.json.message }) }}"
+        "jsonBody": "={{ JSON.stringify({ channel: '__MR_REVIEW_CHANNEL__', text: $('Build Message').item.json.message }) }}"
       },
       "id": "post-slack",
       "name": "Post Slack",
@@ -277,7 +277,7 @@
         "nodeCredentialType": "slackApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ channel: $env.MR_REVIEW_CHANNEL, text: `:x: *MR Review Failed*\\n<${$('Build Prompt').item.json.mr_url}|!${$('Build Prompt').item.json.mr_iid}> ${$('Build Prompt').item.json.mr_title}\\n${$('Success?').item.json.status === 'timeout' ? ':hourglass: Timeout' : ':warning: ' + ($('Success?').item.json.error?.message || 'Unknown error')}` }) }}"
+        "jsonBody": "={{ JSON.stringify({ channel: '__MR_REVIEW_CHANNEL__', text: `:x: *MR Review Failed*\\n<${$('Build Prompt').item.json.mr_url}|!${$('Build Prompt').item.json.mr_iid}> ${$('Build Prompt').item.json.mr_title}\\n${$('Success?').item.json.status === 'timeout' ? ':hourglass: Timeout' : ':warning: ' + ($('Success?').item.json.error?.message || 'Unknown error')}` }) }}"
       },
       "id": "notify-failure",
       "name": "Notify Failure",

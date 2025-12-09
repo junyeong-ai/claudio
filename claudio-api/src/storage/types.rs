@@ -12,6 +12,7 @@ pub struct Project {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disallowed_tools: Option<Vec<String>>,
     pub is_default: bool,
+    pub enable_user_context: bool,
     pub fallback_agent: String,
     pub classify_model: String,
     pub classify_timeout: i32,
@@ -29,6 +30,8 @@ pub struct CreateProject {
     pub disallowed_tools: Option<Vec<String>>,
     #[serde(default)]
     pub is_default: bool,
+    #[serde(default = "default_enable_user_context")]
+    pub enable_user_context: bool,
     #[serde(default = "default_fallback_agent")]
     pub fallback_agent: String,
     #[serde(default = "default_classify_model")]
@@ -47,6 +50,7 @@ pub struct UpdateProject {
     pub allowed_tools: Option<Vec<String>>,
     pub disallowed_tools: Option<Vec<String>>,
     pub is_default: Option<bool>,
+    pub enable_user_context: Option<bool>,
     pub fallback_agent: Option<String>,
     pub classify_model: Option<String>,
     pub classify_timeout: Option<i32>,
@@ -55,6 +59,9 @@ pub struct UpdateProject {
 
 fn default_fallback_agent() -> String {
     "general".into()
+}
+fn default_enable_user_context() -> bool {
+    true
 }
 fn default_classify_model() -> String {
     "haiku".into()

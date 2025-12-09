@@ -477,7 +477,7 @@ init_setup() {
     echo "  2. Set environment variables in n8n (Settings > Variables):"
     echo "     - N8N_API_URL: ${CLAUDIO_API_URL:-http://host.docker.internal:17280}"
     echo "     - N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://host.docker.internal:5678}"
-    echo "     - MR_REVIEW_CHANNEL: (Slack channel ID for MR reviews)"
+    echo "     - N8N_DASHBOARD_URL: (Dashboard URL for Slack user lookups)"
 }
 
 # ============================================================================
