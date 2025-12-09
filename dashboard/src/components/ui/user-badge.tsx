@@ -14,6 +14,7 @@ interface UserBadgeProps {
   size?: 'xs' | 'sm' | 'md';
   navigate?: NavigationTarget;
   className?: string;
+  maxWidth?: 'sm' | 'md' | 'lg' | 'full';
 }
 
 const sizeClasses = {
@@ -48,16 +49,25 @@ function getNavigationHref(userId: string, target: NavigationTarget): string {
     : `/history?requester=${encodeURIComponent(userId)}`;
 }
 
+const maxWidthClasses = {
+  sm: 'max-w-32',
+  md: 'max-w-48',
+  lg: 'max-w-64',
+  full: 'max-w-full',
+};
+
 function GenericUserContent({
   userId,
   showAvatar,
   size,
   className,
+  maxWidth = 'md',
 }: {
   userId: string;
   showAvatar: boolean;
   size: 'xs' | 'sm' | 'md';
   className?: string;
+  maxWidth?: 'sm' | 'md' | 'lg' | 'full';
 }) {
   const { avatar: avatarClass, text: textClass } = sizeClasses[size];
 
@@ -70,7 +80,7 @@ function GenericUserContent({
           </AvatarFallback>
         </Avatar>
       )}
-      <span className="truncate max-w-32 font-mono">{userId}</span>
+      <span className={cn('truncate font-mono', maxWidthClasses[maxWidth])}>{userId}</span>
     </span>
   );
 }
@@ -81,6 +91,7 @@ export function UserBadge({
   size = 'sm',
   navigate,
   className,
+  maxWidth = 'md',
 }: UserBadgeProps) {
   const isSlack = isSlackUserId(userId);
 
@@ -92,6 +103,7 @@ export function UserBadge({
         size={size}
         clickable={true}
         className={className}
+        maxWidth={maxWidth}
       />
     );
   }
@@ -109,6 +121,7 @@ export function UserBadge({
           size={size}
           clickable={false}
           className={className}
+          maxWidth={maxWidth}
         />
       </Link>
     );
@@ -120,6 +133,7 @@ export function UserBadge({
       showAvatar={showAvatar}
       size={size}
       className={className}
+      maxWidth={maxWidth}
     />
   );
 

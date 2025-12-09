@@ -16,12 +16,20 @@ interface SlackUserBadgeProps {
   clickable?: boolean;
   fallback?: ReactNode;
   className?: string;
+  maxWidth?: 'sm' | 'md' | 'lg' | 'full';
 }
 
 const sizeClasses = {
   xs: { avatar: 'h-4 w-4', text: 'text-xs' },
   sm: { avatar: 'h-5 w-5', text: 'text-sm' },
   md: { avatar: 'h-7 w-7', text: 'text-sm' },
+};
+
+const maxWidthClasses = {
+  sm: 'max-w-32',
+  md: 'max-w-48',
+  lg: 'max-w-64',
+  full: 'max-w-full',
 };
 
 export function SlackUserBadge({
@@ -31,6 +39,7 @@ export function SlackUserBadge({
   clickable = true,
   fallback,
   className,
+  maxWidth = 'md',
 }: SlackUserBadgeProps) {
   const ctx = useSlackContextOptional();
   const isSlack = isSlackUserId(userId);
@@ -72,7 +81,7 @@ export function SlackUserBadge({
           </AvatarFallback>
         </Avatar>
       )}
-      <span className="truncate max-w-32">{displayName}</span>
+      <span className={cn('truncate', maxWidthClasses[maxWidth])}>{displayName}</span>
     </span>
   );
 
