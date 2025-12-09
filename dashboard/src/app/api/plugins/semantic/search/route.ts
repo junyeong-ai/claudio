@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { execSemanticCli, handleSemanticError, withTiming } from '../client';
+import { execSsearch, handleSemanticError, withTiming } from '../client';
 
 interface RawSearchResult {
   results?: Array<{
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const args = ['search', JSON.stringify(query), '--format', 'json', '--limit', limit];
     if (tags) args.push('--tags', tags);
 
-    const raw = await execSemanticCli<RawSearchResult>(args.join(' '));
+    const raw = await execSsearch<RawSearchResult>(args);
 
     return NextResponse.json(withTiming({
       results: raw.results || [],

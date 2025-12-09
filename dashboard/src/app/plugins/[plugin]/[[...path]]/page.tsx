@@ -1,28 +1,63 @@
-import { notFound } from 'next/navigation';
+'use client';
+
+import { notFound, useParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getPluginById } from '@/plugins';
 
-interface PluginPageProps {
-  params: Promise<{
-    plugin: string;
-    path?: string[];
-  }>;
-}
+function PluginContent() {
+  const params = useParams();
+  const router = useRouter();
 
-export default async function PluginPage({ params }: PluginPageProps) {
-  const { plugin: pluginId, path = [] } = await params;
+  const pluginId = params.plugin as string;
+  const pathSegments = params.path as string[] | undefined;
+  const currentPath = pathSegments?.join('/') || '';
+
   const plugin = getPluginById(pluginId);
 
   if (!plugin) {
     notFound();
   }
 
-  const routePath = path.join('/');
-  const route = plugin.routes.find(r => r.path === routePath);
+  const route = plugin.routes.find((r) => r.path === currentPath);
 
   if (!route) {
     notFound();
   }
 
   const Component = route.component;
-  return <Component />;
+  const showTabs = plugin.routes.length > 1;
+
+  const handleTabChange = (value: string) => {
+    const basePath = `/plugins/${pluginId}`;
+    router.push(value ? `${basePath}/${value}` : basePath);
+  };
+
+  return (
+    <div className="space-y-6">
+      {showTabs && (
+        <Tabs value={currentPath} onValueChange={handleTabChange}>
+          <TabsList>
+            {plugin.routes.map((r) => (
+              <TabsTrigger key={r.path} value={r.path}>
+                {r.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+      <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+        <Component />
+      </Suspense>
+    </div>
+  );
+}
+
+export default function PluginPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <PluginContent />
+    </Suspense>
+  );
 }
