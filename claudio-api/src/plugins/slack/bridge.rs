@@ -44,6 +44,8 @@ pub struct SlackEvent {
 struct BridgeState {
     config: Arc<SlackConfig>,
     http: Client,
+    slack_client: Arc<SlackHyperClient>,
+    bot_token: SlackApiToken,
 }
 
 pub struct SlackBridge {
@@ -62,9 +64,13 @@ impl SlackBridge {
             SlackClientHyperConnector::new()?,
         ));
 
+        let bot_token = SlackApiToken::new(self.config.bot_token.clone().into());
+
         let state = BridgeState {
             config: self.config.clone(),
             http: Client::new(),
+            slack_client: client.clone(),
+            bot_token,
         };
 
         let callbacks = SlackSocketModeListenerCallbacks::new()
@@ -149,15 +155,12 @@ async fn handle_push_event(event: SlackPushEventCallback, state: BridgeState) {
                 .map(|c| c.to_string())
                 .unwrap_or_default();
 
-            let attachments = msg
-                .content
-                .as_ref()
-                .and_then(|c| c.attachments.as_ref())
-                .map(|atts| {
-                    atts.iter()
-                        .map(|a| serde_json::to_value(a).unwrap_or_default())
-                        .collect()
-                });
+            let ts = msg.origin.ts.to_string();
+
+            let (text, attachments) = match &msg.content {
+                Some(content) => extract_from_content(content),
+                None => fetch_message_content(&state, &channel, &ts).await,
+            };
 
             let event = SlackEvent {
                 event_type: "bot_message".to_string(),
@@ -167,12 +170,8 @@ async fn handle_push_event(event: SlackPushEventCallback, state: BridgeState) {
                     .as_ref()
                     .map(|u| u.to_string())
                     .unwrap_or_default(),
-                text: msg
-                    .content
-                    .as_ref()
-                    .and_then(|c| c.text.clone())
-                    .unwrap_or_default(),
-                ts: msg.origin.ts.to_string(),
+                text,
+                ts,
                 thread_ts: msg.origin.thread_ts.as_ref().map(|t| t.to_string()),
                 bot_id,
                 attachments,
@@ -193,6 +192,49 @@ async fn handle_push_event(event: SlackPushEventCallback, state: BridgeState) {
 
         _ => {}
     }
+}
+
+fn extract_from_content(content: &SlackMessageContent) -> (String, Option<Vec<serde_json::Value>>) {
+    let text = content.text.clone().unwrap_or_default();
+    let attachments = content.attachments.as_ref().map(|atts| {
+        atts.iter()
+            .map(|a| serde_json::to_value(a).unwrap_or_default())
+            .collect()
+    });
+    (text, attachments)
+}
+
+async fn fetch_message_content(
+    state: &BridgeState,
+    channel: &str,
+    ts: &str,
+) -> (String, Option<Vec<serde_json::Value>>) {
+    let session = state.slack_client.open_session(&state.bot_token);
+
+    let request = SlackApiConversationsHistoryRequest::new()
+        .with_channel(channel.into())
+        .with_latest(ts.into())
+        .with_limit(1)
+        .with_inclusive(true);
+
+    match session.conversations_history(&request).await {
+        Ok(response) => {
+            if let Some(message) = response.messages.first() {
+                let text = message.content.text.clone().unwrap_or_default();
+                let attachments = message.content.attachments.as_ref().map(|atts| {
+                    atts.iter()
+                        .map(|a| serde_json::to_value(a).unwrap_or_default())
+                        .collect()
+                });
+                return (text, attachments);
+            }
+        }
+        Err(e) => {
+            warn!("Failed to fetch message via API: {}", e);
+        }
+    }
+
+    (String::new(), None)
 }
 
 fn forward_reaction(
@@ -301,4 +343,33 @@ fn error_handler(
 ) -> StatusCode {
     error!("Socket Mode error: {}", err);
     StatusCode::OK
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_from_content() {
+        let content = SlackMessageContent::new()
+            .with_text("test message".to_string())
+            .with_attachments(vec![
+                SlackMessageAttachment::new()
+                    .with_title("Test Title".to_string())
+                    .with_text("Test Text".to_string()),
+            ]);
+
+        let (text, attachments) = extract_from_content(&content);
+
+        assert_eq!(text, "test message");
+        assert!(attachments.is_some());
+        assert_eq!(attachments.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_strip_mentions() {
+        assert_eq!(strip_mentions("<@U123> hello"), "hello");
+        assert_eq!(strip_mentions("<@U123> <@U456> hi"), "hi");
+        assert_eq!(strip_mentions("no mentions"), "no mentions");
+    }
 }
