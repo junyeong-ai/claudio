@@ -33,6 +33,15 @@ async fn main() -> Result<()> {
     let storage = Storage::new(&config.storage.path)?;
     tracing::info!("Storage initialized at {}", config.storage.path);
 
+    // Ensure isolated directory exists
+    if let Err(e) = std::fs::create_dir_all(&config.defaults.isolated_dir) {
+        tracing::warn!(
+            "Failed to create isolated directory {}: {}",
+            config.defaults.isolated_dir,
+            e
+        );
+    }
+
     if config.semantic_search.enabled {
         sync_agents_on_startup(&storage);
     }
