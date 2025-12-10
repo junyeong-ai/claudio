@@ -5,6 +5,7 @@ import { X, ShieldCheck, Plus } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -144,6 +145,9 @@ function ProjectSettingsContent({
         <DialogTitle>
           {isCreate ? 'New Project' : `Edit Project: ${project?.name}`}
         </DialogTitle>
+        <DialogDescription className="sr-only">
+          {isCreate ? 'Create a new project' : 'Edit project settings'}
+        </DialogDescription>
       </DialogHeader>
 
       <Tabs defaultValue="basic" className="flex-1 overflow-hidden flex flex-col">

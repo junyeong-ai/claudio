@@ -5,6 +5,7 @@ import { X, Plus, Info, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -170,6 +171,9 @@ function AgentEditorContent({
         <DialogTitle>
           {isCreate ? 'New Agent' : `Edit Agent: ${agent?.name}`}
         </DialogTitle>
+        <DialogDescription className="sr-only">
+          {isCreate ? 'Create a new agent' : 'Edit agent configuration'}
+        </DialogDescription>
       </DialogHeader>
 
       <Tabs defaultValue="basic" className="flex-1 overflow-hidden flex flex-col">

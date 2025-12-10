@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonCard, SkeletonMessage, Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/ui/page-header';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn, formatNumber, formatDate } from '@/lib/utils';
 import { staggerContainer, staggerItem, transitions } from '@/lib/animations';
 import { parseMrkdwn, type MrkdwnOptions } from '@/lib/mrkdwn';
@@ -517,7 +517,10 @@ export function SlackPage() {
 
       <Dialog open={threadDialog.open} onOpenChange={(open) => setThreadDialog((prev) => ({ ...prev, open }))}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><MessagesSquare className="h-5 w-5" />Thread</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><MessagesSquare className="h-5 w-5" />Thread</DialogTitle>
+            <DialogDescription className="sr-only">View thread messages</DialogDescription>
+          </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-2 pr-2">
             {threadDialog.loading ? (
               <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>

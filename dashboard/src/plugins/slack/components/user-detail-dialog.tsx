@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -101,6 +102,7 @@ export function UserDetailDialog() {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>User Details</DialogTitle>
+          <DialogDescription className="sr-only">View Slack user profile</DialogDescription>
         </DialogHeader>
 
         {loading ? (
