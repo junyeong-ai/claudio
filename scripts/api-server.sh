@@ -51,6 +51,7 @@ start_server() {
 
     echo -e "${GREEN}Starting Claudio API server...${NC}"
     cd "$PROJECT_ROOT"
+    source_env
 
     [ ! -f "target/release/$BINARY_NAME" ] && build_server
 
