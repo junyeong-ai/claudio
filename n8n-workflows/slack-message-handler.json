@@ -242,7 +242,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/executions/{{ $('Extract').item.json.execution_id }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ options_ts: $json.ts, reply_channel: $('Extract').item.json.channel, reply_ts: $('Extract').item.json.thread_ts, context: $('Extract').item.json.context }) }}",
+        "jsonBody": "={{ JSON.stringify({ reaction_target_ts: $json.message_timestamp, reply_channel: $('Extract').item.json.channel, reply_ts: $('Extract').item.json.thread_ts, context: $('Extract').item.json.context }) }}",
         "options": {
           "timeout": 5000
         }
