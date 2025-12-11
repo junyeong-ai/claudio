@@ -10,7 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, FileText, Plus, Trash2, ChevronRight, ChevronLeft, RefreshCw, Search, X, SortAsc, SortDesc, Filter, History, DollarSign, MessageSquare } from 'lucide-react';
+import { Users, FileText, Plus, Trash2, ChevronRight, ChevronLeft, RefreshCw, Search, X, SortAsc, SortDesc, Filter, History, DollarSign, MessageSquare, Loader2, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import Link from 'next/link';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useUserList, useUserContext, useExecutionDetail } from '@/hooks/use-stats';
@@ -351,9 +352,16 @@ function UsersPageContent() {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="font-medium">Summary</h3>
-                      <div className="flex gap-2">
-                        {context.summary_locked && <Badge variant="secondary" className="text-xs">Syncing</Badge>}
-                        {context.needs_summary && <Badge variant="destructive" className="text-xs">Needs Update</Badge>}
+                      <div className="flex gap-2 items-center">
+                        {context.summary_locked && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Syncing
+                          </Badge>
+                        )}
+                        {context.needs_summary && !context.summary_locked && (
+                          <Badge variant="destructive" className="text-xs">Needs Update</Badge>
+                        )}
                       </div>
                     </div>
                     {context.summary ? (
@@ -361,11 +369,33 @@ function UsersPageContent() {
                     ) : (
                       <p className="text-sm text-muted-foreground italic">No summary yet</p>
                     )}
-                    <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                      <span>{formatNumber(context.conversation_count)}/30 conversations</span>
-                      <span>{formatNumber(context.context_bytes)}/8,000 bytes</span>
-                      {context.last_summarized_at && <span>Last: <RelativeTime timestamp={context.last_summarized_at} /></span>}
-                    </div>
+                    <TooltipProvider>
+                      <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1 cursor-help">
+                              {formatNumber(context.conversation_count)} conversations
+                              <Info className="h-3 w-3" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Summary triggers when ≥5 conversations</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1 cursor-help">
+                              {formatNumber(context.context_bytes)} bytes
+                              <Info className="h-3 w-3" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Summary triggers when &gt;8,000 bytes</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        {context.last_summarized_at && <span>Last: <RelativeTime timestamp={context.last_summarized_at} /></span>}
+                      </div>
+                    </TooltipProvider>
                   </div>
 
                   <div>
@@ -391,9 +421,26 @@ function UsersPageContent() {
                   </div>
 
                   <div>
-                    <h3 className="font-medium mb-3">Recent Requests ({formatNumber(context.recent_conversations.length)})</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-medium">
+                        Recent Requests
+                        {context.conversation_count > 0 && (
+                          <span className="text-muted-foreground font-normal ml-1">
+                            ({context.recent_conversations.length}{context.conversation_count > context.recent_conversations.length && ` of ${formatNumber(context.conversation_count)}`})
+                          </span>
+                        )}
+                      </h3>
+                      {context.conversation_count > context.recent_conversations.length && (
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                          <Link href={`/history?requester=${encodeURIComponent(selectedUser)}`}>
+                            View all
+                            <ChevronRight className="ml-1 h-3 w-3" />
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
                     {context.recent_conversations.length > 0 ? (
-                      <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-2 max-h-96 overflow-y-auto">
+                      <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-2">
                         {context.recent_conversations.map((conv) => (
                           <motion.button
                             key={conv.id}
@@ -414,6 +461,16 @@ function UsersPageContent() {
                       </motion.div>
                     ) : (
                       <p className="text-sm text-muted-foreground italic">No recent requests</p>
+                    )}
+                    {context.conversation_count > context.recent_conversations.length && (
+                      <div className="mt-3 pt-3 border-t">
+                        <Button variant="outline" size="sm" className="w-full text-xs" asChild>
+                          <Link href={`/history?requester=${encodeURIComponent(selectedUser)}`}>
+                            View all {formatNumber(context.conversation_count)} requests in History
+                            <ChevronRight className="ml-1 h-3 w-3" />
+                          </Link>
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </motion.div>
