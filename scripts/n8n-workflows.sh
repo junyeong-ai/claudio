@@ -256,6 +256,7 @@ inject_config() {
     local jira_api_token=$(jq -r '.jira.apiToken // ""' "$CONFIG_FILE")
     local mr_review_channel=$(jq -r '.mrReviewChannel // ""' "$CONFIG_FILE")
     local system_project=$(jq -r '.systemProject // "system"' "$CONFIG_FILE")
+    local auto_fix_reviewer_ids=$(jq -r '.autoFixReviewerIds // ""' "$CONFIG_FILE")
 
     # Create temp file with injected values (don't modify original)
     local tmp=$(mktemp)
@@ -287,6 +288,7 @@ inject_config() {
     sed_inplace "s|__CLAUDIO_PROJECT__|$project|g" "$tmp"
     sed_inplace "s|__SYSTEM_PROJECT__|$system_project|g" "$tmp"
     sed_inplace "s|__MR_REVIEW_CHANNEL__|$mr_review_channel|g" "$tmp"
+    sed_inplace "s|__AUTO_FIX_REVIEWER_IDS__|$auto_fix_reviewer_ids|g" "$tmp"
 
     if [ -s "$tmp" ]; then
         echo "$tmp"

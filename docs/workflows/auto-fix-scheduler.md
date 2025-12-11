@@ -9,7 +9,7 @@ JIRA 티켓의 `ai:auto-fix` 라벨을 감지하여 자동으로 코드 수정�
 | 항목 | 값 |
 |------|-----|
 | **트리거** | Schedule (10분 간격) |
-| **주요 기능** | JIRA 티켓 자동 수정, MR 생성, 리뷰어 자동 할당, 상태 전이 |
+| **주요 기능** | JIRA 티켓 자동 수정, MR 생성, 리뷰어 할당, 상태 전이 |
 
 ---
 
@@ -78,32 +78,20 @@ JIRA 티켓의 `ai:auto-fix` 라벨을 감지하여 자동으로 코드 수정�
                     │                               │
                     ▼                               ▼
               ┌───────────┐                   ┌───────────┐
-              │    Get    │                   │Label Fail │
-              │ Reviewers │                   └─────┬─────┘
-              └─────┬─────┘                         │
-                    │                               ▼
-                    ▼                         ┌───────────┐
-              ┌───────────┐                   │Comment    │
-              │   Map     │                   │  Fail     │
-              │Reviewer ID│                   └─────┬─────┘
-              └─────┬─────┘                         │
-                    │                               ▼
-                    ▼                         ┌───────────┐
-              ┌───────────┐                   │Back to    │
-              │ Create MR │                   │ Backlog   │
-              └─────┬─────┘                   └───────────┘
-                    │
-                    ▼
-              ┌───────────┐
-              │  Parse MR │
-              └─────┬─────┘
-                    │
-                    ▼
-              ┌───────────┐
-              │ Resolved  │
-              └─────┬─────┘
-                    │
-                    ▼
+              │ Create MR │                   │Label Fail │
+              └─────┬─────┘                   └─────┬─────┘
+                    │                               │
+                    ▼                               ▼
+              ┌───────────┐                   ┌───────────┐
+              │  Parse MR │                   │Comment    │
+              └─────┬─────┘                   │  Fail     │
+                    │                         └─────┬─────┘
+                    ▼                               │
+              ┌───────────┐                         ▼
+              │ Resolved  │                   ┌───────────┐
+              └─────┬─────┘                   │Back to    │
+                    │                         │ Backlog   │
+                    ▼                         └───────────┘
               ┌───────────┐
               │Label      │
               │ai:auto-   │
@@ -246,7 +234,7 @@ POST {N8N_API_URL}/v1/projects/system/chat
 
 ### 7. Parse Result
 
-Structured Output 파싱 및 CODEOWNERS 기반 리뷰어 선택:
+Structured Output 파싱 및 리뷰어 설정:
 
 ```javascript
 const prev = $('Build Prompt').item.json;
@@ -268,53 +256,15 @@ if (r.status !== 'completed') {
   res.error = 'No structured output';
 }
 
-// CODEOWNERS 기반 리뷰어 선택
-const REVIEWERS = {
-  frontend: ['<frontend_reviewers>'],
-  backend: ['<backend_reviewers>']
-};
-const files = res.files_changed || [];
-const hasFrontend = files.some(f => f.startsWith('front/'));
-const hasBackend = files.some(f => f.startsWith('services/'));
-let reviewers = [];
-if (hasFrontend) reviewers.push(REVIEWERS.frontend[0]);
-if (hasBackend) reviewers.push(REVIEWERS.backend[0]);
-if (reviewers.length === 0) reviewers.push(REVIEWERS.backend[0]);
+// .n8n-config.json의 autoFixReviewers에서 주입됨 (콤마 구분 문자열 → 배열 변환)
+const reviewers = '__AUTO_FIX_REVIEWERS__'.split(',').filter(Boolean);
 
 return { json: { ...prev, ...res, execution_id: r.id, reviewers } };
 ```
 
-### 8. Get Reviewers (성공 시)
+### 8. Create MR
 
-GitLab API로 프로젝트 멤버 조회:
-
-```
-GET https://__GITLAB_HOST__/api/v4/projects/__GITLAB_PROJECT__/members/all?per_page=100
-```
-
-**Timeout**: 10000ms
-
-### 9. Map Reviewer IDs
-
-username → GitLab user ID 매핑:
-
-```javascript
-const prev = $('Parse Result').item.json;
-const members = $input.first().json || [];
-const reviewerUsernames = prev.reviewers || [];
-const reviewerIds = [];
-
-for (const username of reviewerUsernames) {
-  const member = members.find(m => m.username === username);
-  if (member) reviewerIds.push(member.id);
-}
-
-return { json: { ...prev, reviewer_ids: reviewerIds } };
-```
-
-### 10. Create MR
-
-GitLab MR 생성 (리뷰어 포함):
+GitLab MR 생성 (리뷰어 username으로 직접 할당):
 
 ```
 POST https://__GITLAB_HOST__/api/v4/projects/__GITLAB_PROJECT__/merge_requests
@@ -327,11 +277,23 @@ POST https://__GITLAB_HOST__/api/v4/projects/__GITLAB_PROJECT__/merge_requests
   "title": "[{{ jira_key }}] {{ jira_summary }}",
   "description": "## Auto-fix\n\n{{ summary }}\n\n**Files changed:**\n{{ files_changed }}\n\n---\n🤖 Generated by Auto Fixer",
   "remove_source_branch": true,
-  "reviewer_ids": [123, 456]
+  "reviewers": ["username1", "username2"]
 }
 ```
 
-### 11. Label Update
+### 9. Parse MR
+
+MR 응답 파싱:
+
+```javascript
+const prev = $('Fixed?').item.json;
+const mr = $input.item.json;
+const mr_url = mr.web_url || null;
+const mr_iid = mr.iid || null;
+return { json: { ...prev, mr_url, mr_iid } };
+```
+
+### 10. Label Update
 
 **성공 시** (Native JIRA Node):
 ```json
@@ -355,7 +317,7 @@ POST https://__GITLAB_HOST__/api/v4/projects/__GITLAB_PROJECT__/merge_requests
 }
 ```
 
-### 12. JIRA Comment
+### 11. JIRA Comment
 
 **성공 시** (Native JIRA Node):
 ```
@@ -427,14 +389,14 @@ POST https://__GITLAB_HOST__/api/v4/projects/__GITLAB_PROJECT__/merge_requests
 
 ### Placeholder
 
-| Placeholder | 설명 |
-|-------------|------|
-| `__JIRA_PROJECT__` | JIRA 프로젝트 키 |
-| `__GITLAB_HOST__` | GitLab 호스트 |
-| `__GITLAB_PROJECT__` | GitLab 프로젝트 경로 (URL 인코딩) |
-| `__TARGET_BRANCH__` | MR 타겟 브랜치 |
-| `__JIRA_CREDENTIAL_ID__` | JIRA API 인증 ID |
-| `__GITLAB_CREDENTIAL_ID__` | GitLab API 인증 ID |
+| Placeholder | 설명 | Config Key |
+|-------------|------|------------|
+| `__JIRA_PROJECT__` | JIRA 프로젝트 키 | `jira.project` |
+| `__GITLAB_HOST__` | GitLab 호스트 | `gitlab.host` |
+| `__GITLAB_PROJECT__` | GitLab 프로젝트 경로 (URL 인코딩) | `gitlab.project` |
+| `__AUTO_FIX_REVIEWERS__` | MR 리뷰어 username (콤마 구분) | `autoFixReviewers` |
+| `__JIRA_CREDENTIAL_ID__` | JIRA API 인증 ID | `credentials.jiraSoftwareCloudApi.id` |
+| `__GITLAB_CREDENTIAL_ID__` | GitLab API 인증 ID | `credentials.httpHeaderAuth.id` |
 
 ### n8n 환경변수
 
@@ -451,23 +413,19 @@ POST https://__GITLAB_HOST__/api/v4/projects/__GITLAB_PROJECT__/merge_requests
 
 ---
 
-## 리뷰어 자동 할당
+## 리뷰어 할당
 
-### CODEOWNERS 기반 로직
+`.n8n-config.json`의 `autoFixReviewers`에서 콤마로 구분된 리뷰어 목록을 설정합니다.
 
-변경된 파일 경로에 따라 적절한 리뷰어 자동 할당:
-
-| 파일 경로 패턴 | 리뷰어 그룹 |
-|---------------|------------|
-| `front/*` | Frontend 팀 |
-| `services/*` | Backend 팀 |
-| 기타 | Backend 팀 (기본값) |
-
-### 리뷰어 매핑 플로우
-
+```json
+{
+  "autoFixReviewers": "username1,username2,username3"
+}
 ```
-files_changed → CODEOWNERS 매칭 → username 선택 → GitLab API로 user_id 조회 → MR reviewer_ids에 추가
-```
+
+`n8n-workflows.sh push` 실행 시 `__AUTO_FIX_REVIEWERS__` 플레이스홀더가 해당 문자열로 치환되고, `Parse Result` 노드에서 `.split(',').filter(Boolean)`으로 배열로 변환됩니다.
+
+GitLab API의 `reviewers` 파라미터에 username 배열을 전달하면 자동으로 해당 사용자가 리뷰어로 할당됩니다.
 
 ---
 

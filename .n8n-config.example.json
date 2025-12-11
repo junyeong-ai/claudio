@@ -19,6 +19,7 @@
   "incidentChannels": "",
   "servicePrefix": "",
   "mrReviewChannel": "",
+  "autoFixReviewers": "",
   "gitlab": {
     "host": "gitlab.example.com",
     "project": "team/repo"
