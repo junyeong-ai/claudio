@@ -32,6 +32,7 @@ impl ClaudeExecutor {
                     status: ExecutionStatus::Failed,
                     created,
                     result: None,
+                    structured_output: None,
                     claude_response: None,
                     error: Some(ErrorInfo {
                         code: "invalid_project".into(),
@@ -50,6 +51,7 @@ impl ClaudeExecutor {
                 status: ExecutionStatus::Failed,
                 created,
                 result: None,
+                structured_output: None,
                 claude_response: None,
                 error: Some(ErrorInfo {
                     code: "invalid_working_dir".into(),
@@ -98,11 +100,13 @@ impl ClaudeExecutor {
                         );
 
                         let result = Some(claude_output.result.clone());
+                        let structured_output = claude_output.structured_output.clone();
                         ChatCompletionResponse {
                             id: request_id,
                             status: ExecutionStatus::Completed,
                             created,
                             result,
+                            structured_output,
                             claude_response: Some(claude_output),
                             error: None,
                             project: resolved.name,
@@ -117,6 +121,7 @@ impl ClaudeExecutor {
                             status: ExecutionStatus::Completed,
                             created,
                             result: Some(stdout.into_owned()),
+                            structured_output: None,
                             claude_response: None,
                             error: None,
                             project: resolved.name,
@@ -147,6 +152,7 @@ impl ClaudeExecutor {
                     status: ExecutionStatus::Failed,
                     created,
                     result: None,
+                    structured_output: None,
                     claude_response: None,
                     error: Some(ErrorInfo {
                         code: "execution_failed".into(),
@@ -164,6 +170,7 @@ impl ClaudeExecutor {
                     status: ExecutionStatus::Failed,
                     created,
                     result: None,
+                    structured_output: None,
                     claude_response: None,
                     error: Some(ErrorInfo {
                         code: "spawn_failed".into(),
@@ -181,6 +188,7 @@ impl ClaudeExecutor {
                     status: ExecutionStatus::Timeout,
                     created,
                     result: None,
+                    structured_output: None,
                     claude_response: None,
                     error: Some(ErrorInfo {
                         code: "timeout".into(),
@@ -286,6 +294,11 @@ impl ClaudeExecutor {
         if let Some(ref agents) = req.agents {
             args.push("--agents".into());
             args.push(agents.to_string());
+        }
+
+        if let Some(ref schema) = req.output_schema {
+            args.push("--json-schema".into());
+            args.push(schema.to_string());
         }
 
         args.push(req.user_message.clone());

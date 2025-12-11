@@ -36,7 +36,6 @@ impl Storage {
 
         let conn = pool.get()?;
         Self::init_schema(&conn)?;
-        Self::run_migrations(&conn);
 
         Ok(Self { pool })
     }
@@ -54,6 +53,7 @@ impl Storage {
                 user_message TEXT NOT NULL,
                 user_context TEXT,
                 response TEXT NOT NULL,
+                structured_output TEXT,
                 model TEXT,
                 cost_usd REAL,
                 input_tokens INTEGER,
@@ -168,6 +168,7 @@ impl Storage {
                 examples TEXT NOT NULL DEFAULT '[]',
                 instruction TEXT,
                 tools TEXT,
+                output_schema TEXT,
                 timeout INTEGER NOT NULL DEFAULT 300,
                 static_response INTEGER NOT NULL DEFAULT 0,
                 isolated INTEGER NOT NULL DEFAULT 0,
@@ -181,25 +182,6 @@ impl Storage {
             ",
         )?;
         Ok(())
-    }
-
-    fn run_migrations(conn: &Connection) {
-        let has_enable_user_context: bool = conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM pragma_table_info('projects') WHERE name = 'enable_user_context'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(false);
-
-        if !has_enable_user_context
-            && let Err(e) = conn.execute(
-                "ALTER TABLE projects ADD COLUMN enable_user_context INTEGER NOT NULL DEFAULT 1",
-                [],
-            )
-        {
-            tracing::warn!(error = %e, "Migration: enable_user_context already exists or failed");
-        }
     }
 
     pub fn with_connection<F, T>(&self, f: F) -> Result<T>

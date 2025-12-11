@@ -66,6 +66,8 @@ pub struct ChatCompletionRequest {
     pub mcp_config: Option<serde_json::Value>,
     #[serde(default)]
     pub agents: Option<serde_json::Value>,
+    #[serde(default)]
+    pub output_schema: Option<serde_json::Value>,
     #[serde(default = "default_timeout")]
     pub timeout: Option<u64>,
 }
@@ -81,6 +83,8 @@ pub struct ChatCompletionResponse {
     pub created: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structured_output: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_response: Option<ClaudeCliOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -115,6 +119,7 @@ pub struct ClaudeCliOutput {
     pub usage: Option<UsageInfo>,
     #[serde(rename = "modelUsage")]
     pub model_usage: Option<HashMap<String, ModelUsage>>,
+    pub structured_output: Option<serde_json::Value>,
     pub uuid: Option<String>,
 }
 

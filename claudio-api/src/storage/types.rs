@@ -84,6 +84,8 @@ pub struct Agent {
     pub instruction: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<serde_json::Value>,
     pub timeout: i32,
     pub static_response: bool,
     #[serde(default)]
@@ -106,6 +108,7 @@ pub struct CreateAgent {
     pub examples: Vec<String>,
     pub instruction: Option<String>,
     pub tools: Option<Vec<String>>,
+    pub output_schema: Option<serde_json::Value>,
     #[serde(default = "default_timeout")]
     pub timeout: i32,
     #[serde(default)]
@@ -124,6 +127,7 @@ pub struct UpdateAgent {
     pub examples: Option<Vec<String>>,
     pub instruction: Option<String>,
     pub tools: Option<Vec<String>>,
+    pub output_schema: Option<serde_json::Value>,
     pub timeout: Option<i32>,
     pub static_response: Option<bool>,
     pub isolated: Option<bool>,
@@ -150,6 +154,7 @@ pub struct Execution {
     pub user_message: String,
     pub user_context: Option<String>,
     pub response: String,
+    pub structured_output: Option<String>,
     pub model: Option<String>,
     pub cost_usd: Option<f64>,
     pub input_tokens: Option<i64>,
@@ -263,6 +268,7 @@ pub struct ExecutionDetail {
     pub user_message: String,
     pub user_context: Option<String>,
     pub response: String,
+    pub structured_output: Option<String>,
     pub model: Option<String>,
     pub cost_usd: Option<f64>,
     pub input_tokens: Option<i64>,

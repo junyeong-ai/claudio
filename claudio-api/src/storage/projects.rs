@@ -29,6 +29,7 @@ fn map_agent_row(row: &rusqlite::Row) -> rusqlite::Result<Agent> {
     let keywords: String = row.get(6)?;
     let examples: String = row.get(7)?;
     let tools: Option<String> = row.get(9)?;
+    let output_schema: Option<String> = row.get(10)?;
     Ok(Agent {
         id: row.get(0)?,
         project_id: row.get(1)?,
@@ -40,11 +41,12 @@ fn map_agent_row(row: &rusqlite::Row) -> rusqlite::Result<Agent> {
         examples: serde_json::from_str(&examples).unwrap_or_default(),
         instruction: row.get(8)?,
         tools: tools.and_then(|s| serde_json::from_str(&s).ok()),
-        timeout: row.get(10)?,
-        static_response: row.get::<_, i32>(11)? == 1,
-        isolated: row.get::<_, i32>(12)? == 1,
-        created_at: row.get(13)?,
-        updated_at: row.get(14)?,
+        output_schema: output_schema.and_then(|s| serde_json::from_str(&s).ok()),
+        timeout: row.get(11)?,
+        static_response: row.get::<_, i32>(12)? == 1,
+        isolated: row.get::<_, i32>(13)? == 1,
+        created_at: row.get(14)?,
+        updated_at: row.get(15)?,
     })
 }
 
@@ -285,7 +287,7 @@ impl Storage {
     pub fn list_agents(&self, project_id: &str) -> Result<Vec<Agent>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, timeout, static_response, isolated, created_at, updated_at
+            "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, isolated, created_at, updated_at
              FROM agents WHERE project_id = ?1 ORDER BY priority DESC, name",
         )?;
         let agents = stmt
@@ -299,7 +301,7 @@ impl Storage {
         let conn = self.conn()?;
         let result = conn
             .query_row(
-                "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, timeout, static_response, isolated, created_at, updated_at
+                "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, isolated, created_at, updated_at
                  FROM agents WHERE id = ?1",
                 [id],
                 map_agent_row,
@@ -312,7 +314,7 @@ impl Storage {
         let conn = self.conn()?;
         let result = conn
             .query_row(
-                "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, timeout, static_response, isolated, created_at, updated_at
+                "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, isolated, created_at, updated_at
                  FROM agents WHERE project_id = ?1 AND name = ?2",
                 params![project_id, name],
                 map_agent_row,
@@ -349,11 +351,16 @@ impl Storage {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let output_schema = input
+            .output_schema
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
 
         conn.execute(
-            "INSERT INTO agents (id, project_id, name, description, model, priority, keywords, examples, instruction, tools, timeout, static_response, isolated, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-            params![id, project_id, input.name, input.description, input.model, input.priority, keywords, examples, input.instruction, tools, input.timeout, input.static_response as i32, input.isolated as i32, now, now],
+            "INSERT INTO agents (id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, isolated, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![id, project_id, input.name, input.description, input.model, input.priority, keywords, examples, input.instruction, tools, output_schema, input.timeout, input.static_response as i32, input.isolated as i32, now, now],
         )?;
 
         Ok(Agent {
@@ -367,6 +374,7 @@ impl Storage {
             examples: input.examples,
             instruction: input.instruction,
             tools: input.tools,
+            output_schema: input.output_schema,
             timeout: input.timeout,
             static_response: input.static_response,
             isolated: input.isolated,
@@ -416,6 +424,7 @@ impl Storage {
         add_field!("keywords", input.keywords, json);
         add_field!("examples", input.examples, json);
         add_field!("tools", input.tools, json);
+        add_field!("output_schema", input.output_schema, json);
         add_field!("static_response", input.static_response, bool);
         add_field!("isolated", input.isolated, bool);
 

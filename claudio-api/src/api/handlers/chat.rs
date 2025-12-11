@@ -101,6 +101,9 @@ pub async fn chat_project(
         if req.timeout.is_none() && agent.timeout > 0 {
             req.timeout = Some(agent.timeout as u64);
         }
+        if req.output_schema.is_none() {
+            req.output_schema = agent.output_schema;
+        }
         agent_tools = agent.tools;
         is_isolated = agent.isolated;
     }
@@ -182,6 +185,7 @@ pub async fn chat_project(
         user_message: original_user_message,
         user_context: user_context_snapshot,
         response: response.result.clone().unwrap_or_default(),
+        structured_output: response.structured_output.as_ref().map(|v| v.to_string()),
         model: actual_model,
         cost_usd: response
             .claude_response

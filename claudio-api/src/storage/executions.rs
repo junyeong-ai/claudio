@@ -17,12 +17,11 @@ impl Storage {
         let conn = self.conn()?;
         conn.execute(
             "INSERT INTO executions (
-                id, project, source, requester, agent, instruction, user_message, user_context, response, model,
-                cost_usd, input_tokens, output_tokens,
-                cache_read_tokens, cache_creation_tokens,
-                duration_ms, duration_api_ms, session_id,
-                metadata, created_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+                id, project, source, requester, agent, instruction, user_message, user_context,
+                response, structured_output, model, cost_usd, input_tokens, output_tokens,
+                cache_read_tokens, cache_creation_tokens, duration_ms, duration_api_ms,
+                session_id, metadata, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
             params![
                 execution.id,
                 execution.project,
@@ -33,6 +32,7 @@ impl Storage {
                 execution.user_message,
                 execution.user_context,
                 execution.response,
+                execution.structured_output,
                 execution.model,
                 execution.cost_usd,
                 execution.input_tokens,
@@ -112,11 +112,10 @@ impl Storage {
         let conn = self.conn()?;
         let pattern = format!("%\"{}\":\"{}%", ref_key, ref_value);
         let mut stmt = conn.prepare(
-            "SELECT id, project, source, requester, agent, instruction, user_message, user_context, response, model,
-                    cost_usd, input_tokens, output_tokens,
-                    cache_read_tokens, cache_creation_tokens,
-                    duration_ms, duration_api_ms, session_id,
-                    metadata, created_at
+            "SELECT id, project, source, requester, agent, instruction, user_message, user_context,
+                    response, structured_output, model, cost_usd, input_tokens, output_tokens,
+                    cache_read_tokens, cache_creation_tokens, duration_ms, duration_api_ms,
+                    session_id, metadata, created_at
              FROM executions WHERE source = ?1 AND metadata LIKE ?2
              ORDER BY created_at DESC LIMIT 1",
         )?;
@@ -133,17 +132,18 @@ impl Storage {
                     user_message: row.get(6)?,
                     user_context: row.get(7)?,
                     response: row.get(8)?,
-                    model: row.get(9)?,
-                    cost_usd: row.get(10)?,
-                    input_tokens: row.get(11)?,
-                    output_tokens: row.get(12)?,
-                    cache_read_tokens: row.get(13)?,
-                    cache_creation_tokens: row.get(14)?,
-                    duration_ms: row.get(15)?,
-                    duration_api_ms: row.get(16)?,
-                    session_id: row.get(17)?,
-                    metadata: row.get(18)?,
-                    created_at: row.get(19)?,
+                    structured_output: row.get(9)?,
+                    model: row.get(10)?,
+                    cost_usd: row.get(11)?,
+                    input_tokens: row.get(12)?,
+                    output_tokens: row.get(13)?,
+                    cache_read_tokens: row.get(14)?,
+                    cache_creation_tokens: row.get(15)?,
+                    duration_ms: row.get(16)?,
+                    duration_api_ms: row.get(17)?,
+                    session_id: row.get(18)?,
+                    metadata: row.get(19)?,
+                    created_at: row.get(20)?,
                 })
             })
             .ok();
@@ -416,9 +416,9 @@ impl Storage {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT e.id, e.project, e.agent, e.source, e.requester, e.session_id, e.instruction,
-                    e.user_message, e.user_context, e.response, e.model, e.cost_usd, e.input_tokens,
-                    e.output_tokens, e.cache_read_tokens, e.cache_creation_tokens, e.duration_ms,
-                    e.duration_api_ms, e.metadata, e.created_at,
+                    e.user_message, e.user_context, e.response, e.structured_output, e.model,
+                    e.cost_usd, e.input_tokens, e.output_tokens, e.cache_read_tokens,
+                    e.cache_creation_tokens, e.duration_ms, e.duration_api_ms, e.metadata, e.created_at,
                     COALESCE(SUM(CASE WHEN r.reaction IN ('thumbsup', '+1') AND r.user_id = e.requester THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN r.reaction IN ('thumbsdown', '-1') AND r.user_id = e.requester THEN 1 ELSE 0 END), 0)
              FROM executions e LEFT JOIN reactions r ON e.id = r.execution_id AND r.category = 'feedback'
@@ -427,8 +427,8 @@ impl Storage {
 
         let result = stmt
             .query_row([id], |row| {
-                let pos: i64 = row.get(20)?;
-                let neg: i64 = row.get(21)?;
+                let pos: i64 = row.get(21)?;
+                let neg: i64 = row.get(22)?;
                 Ok(ExecutionDetail {
                     id: row.get(0)?,
                     project: row.get(1)?,
@@ -440,17 +440,18 @@ impl Storage {
                     user_message: row.get(7)?,
                     user_context: row.get(8)?,
                     response: row.get(9)?,
-                    model: row.get(10)?,
-                    cost_usd: row.get(11)?,
-                    input_tokens: row.get(12)?,
-                    output_tokens: row.get(13)?,
-                    cache_read_tokens: row.get(14)?,
-                    cache_creation_tokens: row.get(15)?,
-                    duration_ms: row.get(16)?,
-                    duration_api_ms: row.get(17)?,
+                    structured_output: row.get(10)?,
+                    model: row.get(11)?,
+                    cost_usd: row.get(12)?,
+                    input_tokens: row.get(13)?,
+                    output_tokens: row.get(14)?,
+                    cache_read_tokens: row.get(15)?,
+                    cache_creation_tokens: row.get(16)?,
+                    duration_ms: row.get(17)?,
+                    duration_api_ms: row.get(18)?,
                     feedback: calculate_feedback(pos, neg),
-                    metadata: row.get(18)?,
-                    created_at: row.get(19)?,
+                    metadata: row.get(19)?,
+                    created_at: row.get(20)?,
                 })
             })
             .ok();

@@ -9,6 +9,7 @@ const CONTEXT_COUNT_THRESHOLD: usize = 5;
 const MIN_SUMMARY_INTERVAL_SECS: i64 = 300;
 const MIN_CONVERSATIONS_FOR_SUMMARY: usize = 3;
 const SUMMARY_LOCK_TTL_SECS: i64 = 300;
+const RECENT_CONVERSATIONS_LIMIT: usize = 10;
 
 impl Storage {
     pub fn get_user_rules(&self, user_id: &str) -> Result<Vec<String>> {
@@ -84,6 +85,15 @@ impl Storage {
             )
             .unwrap_or_default();
 
+        let total_conversation_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM executions
+                 WHERE requester = ?1 AND (?2 IS NULL OR created_at > ?2)",
+                params![user_id, last_summarized_at],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
         let recent_conversations: Vec<ConversationItem> = {
             let mut stmt = conn.prepare(
                 "SELECT e.id, e.user_message, e.response, e.created_at,
@@ -95,25 +105,33 @@ impl Storage {
                  FROM executions e
                  WHERE e.requester = ?1
                  AND (?2 IS NULL OR e.created_at > ?2)
-                 ORDER BY e.created_at DESC",
+                 ORDER BY e.created_at DESC
+                 LIMIT ?3",
             )?;
 
-            stmt.query_map(params![user_id, last_summarized_at], |row| {
-                let has_neg: bool = row.get::<_, i64>(4)? == 1;
-                let response: String = row.get(2)?;
-                Ok(ConversationItem {
-                    id: row.get(0)?,
-                    user_message: row.get(1)?,
-                    response: if has_neg { Some(response) } else { None },
-                    created_at: row.get(3)?,
-                    has_negative_feedback: has_neg,
-                })
-            })?
+            stmt.query_map(
+                params![
+                    user_id,
+                    last_summarized_at,
+                    RECENT_CONVERSATIONS_LIMIT as i64
+                ],
+                |row| {
+                    let has_neg: bool = row.get::<_, i64>(4)? == 1;
+                    let response: String = row.get(2)?;
+                    Ok(ConversationItem {
+                        id: row.get(0)?,
+                        user_message: row.get(1)?,
+                        response: if has_neg { Some(response) } else { None },
+                        created_at: row.get(3)?,
+                        has_negative_feedback: has_neg,
+                    })
+                },
+            )?
             .filter_map(|r| r.ok())
             .collect()
         };
 
-        let conversation_count = recent_conversations.len();
+        let conversation_count = total_conversation_count as usize;
         let conversation_chars: i64 = recent_conversations
             .iter()
             .map(|c| c.user_message.len() as i64)
