@@ -108,7 +108,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.N8N_API_URL }}/v1/executions/lookup?source=slack&ref_key=options_ts&ref_value={{ $('Parse').item.json.message_ts }}",
+        "url": "={{ $env.N8N_API_URL }}/v1/executions/lookup?source=slack&ref_key=reaction_target_ts&ref_value={{ $('Parse').item.json.message_ts }}",
         "options": {
           "timeout": 10000
         }
@@ -169,19 +169,21 @@
     },
     {
       "parameters": {
-        "operation": "create",
-        "project": "TMS",
-        "issueType": "Task",
-        "summary": "={{ $json.jira_title }}",
-        "additionalFields": {
-          "description": "={{ $json.jira_description }}",
-          "priority": "={{ $json.priority === 'High' ? 'P1 - High' : 'P2 - Medium' }}"
+        "method": "POST",
+        "url": "https://42dot.atlassian.net/rest/api/3/issue",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { project: { id: '10588' }, issuetype: { id: '10008' }, summary: $('Extract').item.json.jira_title || '[BUG] Unknown - Incident', description: $('Extract').item.json.jira_description, priority: { name: $('Extract').item.json.priority === 'High' ? 'P1 - High' : 'P2 - Medium' } } }) }}",
+        "options": {
+          "timeout": 30000
         }
       },
       "id": "create-jira",
       "name": "Create JIRA",
-      "type": "n8n-nodes-base.jira",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1680,
         400
@@ -420,6 +422,7 @@
     },
     {
       "parameters": {
+        "resource": "issue",
         "operation": "update",
         "issueKey": "={{ $json.jira_key }}",
         "updateFields": {
@@ -558,9 +561,9 @@
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "={{ $json.channel }}"
+          "value": "={{ $('Error Data').item.json.channel }}"
         },
-        "timestamp": "={{ $json.message_ts }}",
+        "timestamp": "={{ $('Error Data').item.json.message_ts }}",
         "name": "loading"
       },
       "id": "remove-loading-err",
