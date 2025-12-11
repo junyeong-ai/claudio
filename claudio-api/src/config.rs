@@ -43,6 +43,7 @@ pub struct DefaultsConfig {
 pub struct SlackConfig {
     pub app_token: String,
     pub bot_token: String,
+    pub bot_user_ids: Vec<String>,
     pub webhooks: SlackWebhooks,
 }
 
@@ -133,9 +134,19 @@ impl Config {
         let app_token = env::var("SLACK_APP_TOKEN").ok().filter(|s| !s.is_empty())?;
         let bot_token = env::var("SLACK_BOT_TOKEN").ok().filter(|s| !s.is_empty())?;
 
+        let bot_user_ids = env::var("SLACK_BOT_USER_IDS")
+            .map(|v| {
+                v.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Some(SlackConfig {
             app_token,
             bot_token,
+            bot_user_ids,
             webhooks: SlackWebhooks {
                 mention: env::var("SLACK_WEBHOOK_MENTION")
                     .ok()

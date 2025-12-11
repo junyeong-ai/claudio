@@ -144,7 +144,19 @@ async fn handle_push_event(event: SlackPushEventCallback, state: BridgeState) {
             let sender = &msg.sender;
             let bot_id = sender.bot_id.as_ref().map(|b| b.to_string());
 
+            // Only process bot messages (e.g., Datadog alerts)
             if bot_id.is_none() {
+                return;
+            }
+
+            // Skip messages from our own bot
+            let user_id = sender
+                .user
+                .as_ref()
+                .map(|u| u.to_string())
+                .unwrap_or_default();
+            if state.config.bot_user_ids.contains(&user_id) {
+                info!("Skipping message from own bot: {}", user_id);
                 return;
             }
 
@@ -244,6 +256,13 @@ fn forward_reaction(
     user: &SlackUserId,
     event_type: &str,
 ) {
+    // Skip reactions added by bot users
+    let user_id = user.to_string();
+    if state.config.bot_user_ids.contains(&user_id) {
+        info!("Skipping reaction from bot user: {}", user_id);
+        return;
+    }
+
     let (channel, ts) = match item {
         SlackReactionsItem::Message(msg) => (
             msg.origin
