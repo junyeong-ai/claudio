@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { Bot, Clock, Copy, History, Pencil, Trash2 } from 'lucide-react';
+import { Bot, Braces, Clock, Copy, History, Pencil, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -96,6 +96,12 @@ export function AgentCard({ agent, onEdit, onDelete, onDuplicate }: AgentCardPro
               {agent.timeout}s
             </span>
             {agent.static_response && <Badge variant="secondary">static</Badge>}
+            {agent.output_schema && (
+              <Badge variant="outline" className="gap-1">
+                <Braces className="h-3 w-3" />
+                JSON
+              </Badge>
+            )}
           </div>
 
           {agent.keywords.length > 0 && (

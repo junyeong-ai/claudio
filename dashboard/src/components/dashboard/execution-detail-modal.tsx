@@ -12,6 +12,7 @@ import { SlackChannelBadge } from '@/plugins/slack/components';
 import { UserBadge } from '@/components/ui/user-badge';
 import { formatNumber, formatDuration, formatModelName, formatDate } from '@/lib/utils';
 import { ContentRenderer, detectFormat } from '@/lib/content';
+import { StructuredOutputSection } from './structured-output-section';
 
 interface ExecutionDetailModalProps {
   execution: ExecutionDetail | null;
@@ -219,17 +220,24 @@ export function ExecutionDetailModal({ execution, isLoading, open, onClose }: Ex
                 </section>
               )}
 
-              <section>
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-sm font-semibold">Response</h3>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal text-muted-foreground">
-                    {responseFormat}
-                  </Badge>
-                </div>
-                <div className="rounded-lg border bg-card p-4">
-                  <ContentRenderer content={execution.response} format={responseFormat} />
-                </div>
-              </section>
+              {execution.response && execution.response.trim() && (
+                <section>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-sm font-semibold">Response</h3>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal text-muted-foreground">
+                      {responseFormat}
+                    </Badge>
+                  </div>
+                  <div className="rounded-lg border bg-card p-4">
+                    <ContentRenderer content={execution.response} format={responseFormat} />
+                  </div>
+                </section>
+              )}
+
+              <StructuredOutputSection
+                structuredOutput={execution.structured_output}
+                defaultOpen={!execution.response?.trim()}
+              />
             </div>
           ) : (
             <div className="flex h-[200px] items-center justify-center text-muted-foreground">

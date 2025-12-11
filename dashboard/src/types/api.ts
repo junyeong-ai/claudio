@@ -200,6 +200,7 @@ export interface ExecutionDetail {
   user_message: string;
   user_context: string | null;
   response: string;
+  structured_output: string | null;
   model: string | null;
   cost_usd: number | null;
   input_tokens: number | null;
@@ -294,6 +295,8 @@ export interface Project {
   updated_at: number;
 }
 
+export type JsonSchema = Record<string, unknown>;
+
 export interface Agent {
   id: string;
   project_id: string;
@@ -305,6 +308,7 @@ export interface Agent {
   examples: string[];
   instruction?: string;
   tools?: string[];
+  output_schema?: JsonSchema;
   timeout: number;
   static_response: boolean;
   isolated: boolean;
@@ -349,6 +353,7 @@ export interface CreateAgent {
   examples?: string[];
   instruction?: string;
   tools?: string[];
+  output_schema?: JsonSchema;
   timeout?: number;
   static_response?: boolean;
   isolated?: boolean;
@@ -363,6 +368,7 @@ export interface UpdateAgent {
   examples?: string[];
   instruction?: string;
   tools?: string[];
+  output_schema?: JsonSchema;
   timeout?: number;
   static_response?: boolean;
   isolated?: boolean;

@@ -25,7 +25,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MarkdownEditor } from '@/components/ui/markdown-editor';
-import type { Agent, CreateAgent, UpdateAgent } from '@/types/api';
+import { SchemaEditor } from '@/components/agents/schema-editor';
+import type { Agent, CreateAgent, UpdateAgent, JsonSchema } from '@/types/api';
 
 interface AgentEditorProps {
   agent: Agent | null;
@@ -95,6 +96,7 @@ function AgentEditorContent({
     keywords: agent?.keywords ?? [],
     examples: agent?.examples ?? [],
     tools: agent?.tools ?? [],
+    outputSchema: agent?.output_schema ?? null,
   }), [agent]);
 
   const [name, setName] = useState(initialState.name);
@@ -108,6 +110,7 @@ function AgentEditorContent({
   const [keywords, setKeywords] = useState<string[]>(initialState.keywords);
   const [examples, setExamples] = useState<string[]>(initialState.examples);
   const [tools, setTools] = useState<string[]>(initialState.tools);
+  const [outputSchema, setOutputSchema] = useState<JsonSchema | null>(initialState.outputSchema);
 
   const [keywordInput, setKeywordInput] = useState('');
   const [exampleInput, setExampleInput] = useState('');
@@ -141,6 +144,7 @@ function AgentEditorContent({
       keywords,
       examples,
       tools: tools.length > 0 ? tools : undefined,
+      output_schema: outputSchema || undefined,
     };
     await onSave(data);
     onOpenChange(false);
@@ -177,10 +181,11 @@ function AgentEditorContent({
       </DialogHeader>
 
       <Tabs defaultValue="basic" className="flex-1 overflow-hidden flex flex-col">
-        <TabsList className="grid w-full grid-cols-4 shrink-0">
+        <TabsList className="grid w-full grid-cols-5 shrink-0">
           <TabsTrigger value="basic">Basic</TabsTrigger>
           <TabsTrigger value="routing">Routing</TabsTrigger>
           <TabsTrigger value="instruction">Instruction</TabsTrigger>
+          <TabsTrigger value="output">Output</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
         </TabsList>
 
@@ -465,6 +470,16 @@ Be constructive and specific.`}
               {staticResponse
                 ? "⚡ Static Response: This content will be returned directly."
                 : "This instruction defines agent behavior. Click to edit."
+              }
+            </p>
+          </TabsContent>
+
+          <TabsContent value="output" className="m-0">
+            <SchemaEditor schema={outputSchema} onChange={setOutputSchema} />
+            <p className="text-xs text-muted-foreground mt-3">
+              {outputSchema
+                ? "Agent will return structured JSON matching this schema."
+                : "Agent will return natural language responses."
               }
             </p>
           </TabsContent>
