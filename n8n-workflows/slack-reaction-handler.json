@@ -35,7 +35,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const e = $('Webhook').item.json.body;\nif (e.type !== 'reaction_added') return { json: { skip: true } };\n\nconst r = e.reaction;\nif (!['one', 'two'].includes(r)) return { json: { skip: true } };\n\n// Support both nested (Slack API) and flat (bridge) formats\nconst channel = e.item?.channel || e.channel;\nconst messageTs = e.item?.ts || e.message_ts;\n\nif (!channel || !messageTs) return { json: { skip: true } };\n\nconst action = r === 'one' ? 'jira_only' : 'jira_fix';\nconst jira_prompt = `Create JIRA ticket from Slack message\n\n**Channel**: ${channel}\n**Message TS**: ${messageTs}\n**Requested by**: ${e.user}`;\n\nreturn {\n  json: {\n    skip: false,\n    action,\n    channel,\n    message_ts: messageTs,\n    user: e.user,\n    jira_prompt\n  }\n};"
+        "jsCode": "const e = $('Webhook').item.json.body;\nif (e.type !== 'reaction_added') return { json: { skip: true } };\nconst r = e.reaction;\nif (!['one', 'two'].includes(r)) return { json: { skip: true } };\nconst channel = e.item?.channel || e.channel;\nconst message_ts = e.item?.ts || e.message_ts;\nif (!channel || !message_ts) return { json: { skip: true } };\nreturn { json: { skip: false, action: r === 'one' ? 'jira_only' : 'jira_autofix', channel, message_ts, user: e.user } };"
       },
       "id": "parse",
       "name": "Parse",
@@ -89,8 +89,8 @@
         "timestamp": "={{ $json.message_ts }}",
         "name": "loading"
       },
-      "id": "processing",
-      "name": "Processing",
+      "id": "loading",
+      "name": "Loading",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
@@ -99,25 +99,22 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.jira_prompt, agent: 'JIRA Creator', source: 'slack', requester: 'slack-reaction-workflow', metadata: { action: $json.action, channel: $json.channel, message_ts: $json.message_ts, triggered_by: $json.user, workflow_execution_id: $executionId } }) }}",
+        "method": "GET",
+        "url": "={{ $env.N8N_API_URL }}/v1/executions/lookup?source=slack&ref_key=options_ts&ref_value={{ $('Parse').item.json.message_ts }}",
         "options": {
-          "timeout": 200000
+          "timeout": 10000
         }
       },
-      "id": "create-jira",
-      "name": "Create JIRA",
+      "id": "fetch-context",
+      "name": "Fetch Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -128,10 +125,10 @@
     },
     {
       "parameters": {
-        "jsCode": "const JIRA_HOST = '__JIRA_HOST__';\nconst prev = $('Parse').item.json;\nconst r = $input.first().json;\n\nif (r.status !== 'completed') {\n  return { json: { ...prev, jiraKey: null, jiraUrl: null, error: r.error?.message || 'JIRA creation failed', jira_execution_id: r.id, jira_duration_ms: r.duration_ms } };\n}\n\nconst key = (r.result || '').match(/[A-Z]+-\\d+/)?.[0];\nif (!key) {\n  return { json: { ...prev, jiraKey: null, jiraUrl: null, error: 'JIRA key extraction failed', jira_execution_id: r.id, jira_duration_ms: r.duration_ms } };\n}\n\nconst jiraUrl = `https://${JIRA_HOST}/browse/${key}`;\nconst fix_prompt = `Auto-fix issue and create MR\n\n**JIRA**: <${jiraUrl}|${key}>\n**Channel**: ${prev.channel}\n**Message TS**: ${prev.message_ts}`;\n\nreturn {\n  json: {\n    ...prev,\n    jiraKey: key,\n    jiraUrl,\n    error: null,\n    jira_execution_id: r.id,\n    jira_duration_ms: r.duration_ms,\n    fix_prompt\n  }\n};"
+        "jsCode": "const parse = $('Parse').item.json;\nconst res = $input.first().json;\nconst ctx = res.execution || {};\nlet jira_key = null, jira_title = '', jira_description = null, priority = 'Medium', alert = {}, can_auto_fix = false;\n\nif (ctx.id && ctx.metadata) {\n  try {\n    const meta = typeof ctx.metadata === 'string' ? JSON.parse(ctx.metadata) : ctx.metadata;\n    if (meta.jira_key) jira_key = meta.jira_key;\n    const context = meta.context ? (typeof meta.context === 'string' ? JSON.parse(meta.context) : meta.context) : {};\n    if (context.alert) alert = context.alert;\n    if (context.can_auto_fix === true) can_auto_fix = true;\n    if (context.analysis) {\n      jira_title = context.analysis.jira_title || '';\n      jira_description = context.analysis.jira_description || null;\n      priority = context.analysis.priority || 'Medium';\n      if (context.analysis.can_auto_fix === true) can_auto_fix = true;\n    }\n  } catch (e) {}\n}\n\nif (!jira_title) jira_title = `[BUG] ${alert.service || 'Unknown'} - ${alert.alert_name || 'Incident'}`;\n\nif (!jira_description || typeof jira_description !== 'object') {\n  jira_description = {\n    version: 1, type: 'doc',\n    content: [\n      { type: 'paragraph', content: [{ type: 'text', text: 'Auto-generated from incident analysis', marks: [{ type: 'em' }] }] },\n      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Alert Info' }] },\n      { type: 'bulletList', content: [\n        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: `Service: ${alert.service || 'N/A'}` }] }] },\n        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: `Environment: ${alert.env || 'N/A'}` }] }] },\n        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: `Trace ID: ${alert.trace_id || 'N/A'}` }] }] }\n      ]}\n    ]\n  };\n}\n\nreturn { json: { ...parse, execution_id: ctx.id || null, jira_key, jira_title, jira_description, priority, alert, can_auto_fix } };"
       },
-      "id": "parse-jira",
-      "name": "Parse JIRA",
+      "id": "extract",
+      "name": "Extract",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -149,7 +146,91 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $json.jiraKey }}",
+              "leftValue": "={{ $json.jira_key }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-jira",
+      "name": "Has JIRA?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "project": "TMS",
+        "issueType": "Task",
+        "summary": "={{ $json.jira_title }}",
+        "additionalFields": {
+          "description": "={{ $json.jira_description }}",
+          "priority": "={{ $json.priority === 'High' ? 'P1 - High' : 'P2 - Medium' }}"
+        }
+      },
+      "id": "create-jira",
+      "name": "Create JIRA",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        400
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Extract').item.json;\nconst r = $input.first().json;\nif (!r.key) return { json: { ...prev, jira_key: null, jira_url: null, error: r.errorMessages?.[0] || r.errors?.summary || 'JIRA creation failed' } };\nconst jira_key = r.key;\nconst jira_url = `https://42dot.atlassian.net/browse/${jira_key}`;\nreturn { json: { ...prev, jira_key, jira_url, error: null, new_jira: true } };"
+      },
+      "id": "parse-new-jira",
+      "name": "Parse New JIRA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Extract').item.json;\nreturn { json: { ...prev, jira_url: `https://42dot.atlassian.net/browse/${prev.jira_key}`, error: null, new_jira: false } };"
+      },
+      "id": "use-existing-jira",
+      "name": "Use Existing JIRA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.jira_key }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
@@ -166,8 +247,21 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1500,
+        2040,
         300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (data.execution_id && data.jira_key) {\n  try {\n    await this.helpers.httpRequest({\n      method: 'PATCH',\n      url: `${process.env.N8N_API_URL}/v1/executions/${data.execution_id}`,\n      body: { jira_key: data.jira_key },\n      json: true,\n      timeout: 5000\n    });\n  } catch (e) {}\n}\nreturn { json: data };"
+      },
+      "id": "save-jira-key",
+      "name": "Save JIRA Key",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        250
       ]
     },
     {
@@ -181,7 +275,7 @@
                 },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.action }}",
+                    "leftValue": "={{ $('Extract').item.json.action }}",
                     "rightValue": "jira_only",
                     "operator": {
                       "type": "string",
@@ -201,10 +295,18 @@
                 },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "jira_fix",
+                    "leftValue": "={{ $('Extract').item.json.action }}",
+                    "rightValue": "jira_autofix",
                     "operator": {
                       "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $('Extract').item.json.can_auto_fix }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
                       "operation": "equals"
                     }
                   }
@@ -212,7 +314,35 @@
                 "combinator": "and"
               },
               "renameOutput": true,
-              "outputKey": "JIRA + Fix"
+              "outputKey": "JIRA + AutoFix"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Extract').item.json.action }}",
+                    "rightValue": "jira_autofix",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $('Extract').item.json.can_auto_fix }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "AutoFix Not Allowed"
             }
           ]
         },
@@ -223,32 +353,40 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        1680,
+        2400,
         250
       ]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: `:jira2: <${$json.jiraUrl}|${$json.jiraKey}> created`, thread_ts: $json.message_ts }) }}"
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Save JIRA Key').item.json.channel }}"
+        },
+        "text": "={{ `:jira-new: <${$('Save JIRA Key').item.json.jira_url}|${$('Save JIRA Key').item.json.jira_key}> ${$('Save JIRA Key').item.json.jira_title}` }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Save JIRA Key').item.json.message_ts }}"
+            }
+          }
+        }
       },
       "id": "reply-jira-only",
       "name": "Reply JIRA Only",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
-        1860,
+        2580,
         150
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       }
     },
@@ -259,9 +397,9 @@
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "={{ $('Parse').item.json.channel }}"
+          "value": "={{ $('Extract').item.json.channel }}"
         },
-        "timestamp": "={{ $('Parse').item.json.message_ts }}",
+        "timestamp": "={{ $('Extract').item.json.message_ts }}",
         "name": "loading"
       },
       "id": "done-jira-only",
@@ -269,149 +407,63 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2040,
+        2760,
         150
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('Route').item.json.jira_execution_id, status: 'success', duration_ms: $('Route').item.json.jira_duration_ms, metadata: { action: 'jira_only', jira_key: $('Route').item.json.jiraKey, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
-        "options": {
-          "timeout": 5000
-        }
-      },
-      "id": "stats-jira-only",
-      "name": "Stats JIRA Only",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2220,
-        150
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.fix_prompt, agent: 'Auto Fixer', source: 'slack', requester: 'slack-reaction-workflow', metadata: { action: 'jira_fix', jira_key: $json.jiraKey, jira_url: $json.jiraUrl, channel: $json.channel, message_ts: $json.message_ts, triggered_by: $json.user, workflow_execution_id: $executionId } }) }}",
-        "options": {
-          "timeout": 660000
-        }
-      },
-      "id": "create-fix",
-      "name": "Create Fix",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1860,
-        350
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const prev = $('Route').item.json;\nconst r = $input.first().json;\n\nlet res = { success: false, autoFixed: false, summary: '', error: '' };\n\nif (r.status !== 'completed') {\n  res.error = r.error?.message || 'API error';\n} else {\n  try {\n    const m = (r.result || '').match(/```json\\s*([\\s\\S]*?)\\s*```/) || (r.result || '').match(/\\{[\\s\\S]*\\}/);\n    if (m) res = { ...res, ...JSON.parse(m[1] || m[0]) };\n  } catch (e) {\n    res.error = 'JSON parsing failed';\n  }\n}\n\nreturn {\n  json: {\n    ...prev,\n    ...res,\n    fix_execution_id: r.id,\n    fix_duration_ms: r.duration_ms,\n    fix_status: r.status\n  }\n};"
-      },
-      "id": "parse-fix",
-      "name": "Parse Fix",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2040,
-        350
-      ]
-    },
-    {
-      "parameters": {
-        "resource": "issue",
         "operation": "update",
-        "issueKey": "={{ $json.jiraKey }}",
+        "issueKey": "={{ $json.jira_key }}",
         "updateFields": {
-          "comment": "={{ $json.autoFixed ? `🤖 *Auto-fix completed*\\n\\n*Branch:* \\`${$json.branchName}\\`\\n*MR:* ${$json.mrUrl}\\n\\n*Changes:*\\n${$json.summary}\\n\\n_Draft MR has been created. Please review and merge._` : `🤖 *Auto-analysis completed*\\n\\n*Reason auto-fix not possible:*\\n${$json.error || $json.summary || 'Complexity requires manual handling.'}\\n\\n_Please proceed with manual fix._` }}"
+          "labels": [
+            "ai:auto-fix"
+          ]
         }
       },
-      "id": "jira-comment",
-      "name": "JIRA Comment",
+      "id": "add-autofix-label",
+      "name": "Add auto-fix Label",
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
-      "position": [
-        2220,
-        350
-      ],
-      "credentials": {
-        "jiraSoftwareCloudApi": {
-          "id": "__JIRA_CREDENTIAL_ID__",
-          "name": "__JIRA_CREDENTIAL_NAME__"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const d = $input.first().json;\nlet msg;\n\nif (d.autoFixed && d.mrUrl) {\n  msg = `:white_check_mark: *Auto-fix completed*\\n:jira2: <${d.jiraUrl}|${d.jiraKey}>\\n:gitlab: <${d.mrUrl}|Draft MR>\\n:git: \\`${d.branchName}\\`\\n\\n${d.summary}\\n\\n_Please review and merge._`;\n} else if (d.success && !d.autoFixed) {\n  msg = `:memo: *JIRA created (manual fix required)*\\n:jira2: <${d.jiraUrl}|${d.jiraKey}>\\n\\n${d.summary || d.error || 'Complexity too high for auto-fix.'}\\n\\n_Analysis has been added as a JIRA comment._`;\n} else {\n  msg = `:warning: *Error during processing*\\n:jira2: <${d.jiraUrl}|${d.jiraKey}>\\n\\n${d.error || 'Unknown error'}`;\n}\n\nreturn { json: { ...d, slackMessage: msg } };"
-      },
-      "id": "format-fix",
-      "name": "Format Fix",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2400,
-        350
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: $json.slackMessage, thread_ts: $json.message_ts }) }}"
-      },
-      "id": "reply-fix",
-      "name": "Reply Fix",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
       "position": [
         2580,
         350
       ],
       "credentials": {
-        "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "resource": "reaction",
-        "operation": "remove",
+        "select": "channel",
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "={{ $('Parse').item.json.channel }}"
+          "value": "={{ $('Save JIRA Key').item.json.channel }}"
         },
-        "timestamp": "={{ $('Parse').item.json.message_ts }}",
-        "name": "loading"
+        "text": "={{ `:jira-new: <${$('Save JIRA Key').item.json.jira_url}|${$('Save JIRA Key').item.json.jira_key}> ${$('Save JIRA Key').item.json.jira_title}\\n:robot_face: \\`ai:auto-fix\\` 라벨 추가됨 - 자동 수정 대기 중` }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Save JIRA Key').item.json.message_ts }}"
+            }
+          }
+        }
       },
-      "id": "done-fix",
-      "name": "Done Fix",
+      "id": "reply-autofix",
+      "name": "Reply AutoFix",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
@@ -420,68 +472,82 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
-      },
-      "onError": "continueRegularOutput"
+      }
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('Format Fix').item.json.fix_execution_id, status: $('Format Fix').item.json.fix_status === 'completed' ? 'success' : ($('Format Fix').item.json.fix_status === 'timeout' ? 'timeout' : 'error'), duration_ms: $('Format Fix').item.json.fix_duration_ms, metadata: { action: 'jira_fix', jira_key: $('Format Fix').item.json.jiraKey, auto_fixed: $('Format Fix').item.json.autoFixed, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
-        "options": {
-          "timeout": 5000
-        }
+        "resource": "reaction",
+        "operation": "remove",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Extract').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Extract').item.json.message_ts }}",
+        "name": "loading"
       },
-      "id": "stats-fix",
-      "name": "Stats Fix",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "done-autofix",
+      "name": "Done AutoFix",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
         2940,
         350
       ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Parse JIRA').item.json;\nreturn { json: { channel: d.channel, message_ts: d.message_ts, error: d.error, jira_execution_id: d.jira_execution_id, jira_duration_ms: d.jira_duration_ms } };"
+        "jsCode": "const d = $('JIRA OK?').item.json;\nreturn { json: { channel: $('Extract').item.json.channel, message_ts: $('Extract').item.json.message_ts, error: d.error || 'JIRA creation failed' } };"
       },
-      "id": "jira-error",
-      "name": "JIRA Error",
+      "id": "error-data",
+      "name": "Error Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1680,
+        2220,
         450
       ]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: `:x: ${$json.error}`, thread_ts: $json.message_ts }) }}"
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Error Data').item.json.channel }}"
+        },
+        "text": "={{ `:x: JIRA creation failed: ${$('Error Data').item.json.error}` }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Error Data').item.json.message_ts }}"
+            }
+          }
+        }
       },
       "id": "reply-error",
       "name": "Reply Error",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
-        1860,
+        2400,
         450
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       }
     },
@@ -497,41 +563,109 @@
         "timestamp": "={{ $json.message_ts }}",
         "name": "loading"
       },
-      "id": "done-error",
-      "name": "Done Error",
+      "id": "remove-loading-err",
+      "name": "Remove Loading Err",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2040,
+        2580,
         450
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-reaction-handler', execution_id: $('JIRA Error').item.json.jira_execution_id, status: 'error', duration_ms: $('JIRA Error').item.json.jira_duration_ms, metadata: { action: 'jira_creation_failed', error: $('JIRA Error').item.json.error, channel: $('JIRA Error').item.json.channel } }) }}",
-        "options": {
-          "timeout": 5000
-        }
+        "resource": "reaction",
+        "operation": "add",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.channel }}"
+        },
+        "timestamp": "={{ $json.message_ts }}",
+        "name": "x"
       },
-      "id": "stats-error",
-      "name": "Stats Error",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "add-x",
+      "name": "❌",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
-        2220,
+        2760,
         450
       ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Save JIRA Key').item.json.channel }}"
+        },
+        "text": "={{ `:jira-new: <${$('Save JIRA Key').item.json.jira_url}|${$('Save JIRA Key').item.json.jira_key}> ${$('Save JIRA Key').item.json.jira_title}\\n:no_entry: 이 이슈는 자동 수정이 불가능합니다` }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Save JIRA Key').item.json.message_ts }}"
+            }
+          }
+        }
+      },
+      "id": "reply-no-autofix",
+      "name": "Reply No AutoFix",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2580,
+        550
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "remove",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Extract').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Extract').item.json.message_ts }}",
+        "name": "loading"
+      },
+      "id": "done-no-autofix",
+      "name": "Done No AutoFix",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2760,
+        550
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      },
       "onError": "continueRegularOutput"
     }
   ],
@@ -573,7 +707,7 @@
       "main": [
         [
           {
-            "node": "Processing",
+            "node": "Loading",
             "type": "main",
             "index": 0
           }
@@ -581,8 +715,48 @@
         []
       ]
     },
-    "Processing": {
+    "Loading": {
       "main": [
+        [
+          {
+            "node": "Fetch Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Context": {
+      "main": [
+        [
+          {
+            "node": "Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract": {
+      "main": [
+        [
+          {
+            "node": "Has JIRA?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has JIRA?": {
+      "main": [
+        [
+          {
+            "node": "Use Existing JIRA",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Create JIRA",
@@ -596,14 +770,25 @@
       "main": [
         [
           {
-            "node": "Parse JIRA",
+            "node": "Parse New JIRA",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse JIRA": {
+    "Parse New JIRA": {
+      "main": [
+        [
+          {
+            "node": "JIRA OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Existing JIRA": {
       "main": [
         [
           {
@@ -618,14 +803,25 @@
       "main": [
         [
           {
-            "node": "Route",
+            "node": "Save JIRA Key",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "JIRA Error",
+            "node": "Error Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save JIRA Key": {
+      "main": [
+        [
+          {
+            "node": "Route",
             "type": "main",
             "index": 0
           }
@@ -643,7 +839,25 @@
         ],
         [
           {
-            "node": "Create Fix",
+            "node": "Add auto-fix Label",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply No AutoFix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply No AutoFix": {
+      "main": [
+        [
+          {
+            "node": "Done No AutoFix",
             "type": "main",
             "index": 0
           }
@@ -661,84 +875,29 @@
         ]
       ]
     },
-    "Done JIRA Only": {
+    "Add auto-fix Label": {
       "main": [
         [
           {
-            "node": "Stats JIRA Only",
+            "node": "Reply AutoFix",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Create Fix": {
+    "Reply AutoFix": {
       "main": [
         [
           {
-            "node": "Parse Fix",
+            "node": "Done AutoFix",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse Fix": {
-      "main": [
-        [
-          {
-            "node": "JIRA Comment",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "JIRA Comment": {
-      "main": [
-        [
-          {
-            "node": "Format Fix",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format Fix": {
-      "main": [
-        [
-          {
-            "node": "Reply Fix",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Reply Fix": {
-      "main": [
-        [
-          {
-            "node": "Done Fix",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Done Fix": {
-      "main": [
-        [
-          {
-            "node": "Stats Fix",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "JIRA Error": {
+    "Error Data": {
       "main": [
         [
           {
@@ -753,18 +912,18 @@
       "main": [
         [
           {
-            "node": "Done Error",
+            "node": "Remove Loading Err",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Done Error": {
+    "Remove Loading Err": {
       "main": [
         [
           {
-            "node": "Stats Error",
+            "node": "❌",
             "type": "main",
             "index": 0
           }

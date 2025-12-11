@@ -24,7 +24,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://__GITLAB_HOST__/api/v4/projects/{{ encodeURIComponent('__GITLAB_PROJECT__') }}/merge_requests",
+        "url": "=https://gitlab.42dot.ai/api/v4/projects/{{ encodeURIComponent('tms/appius') }}/merge_requests",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendQuery": true,
@@ -60,14 +60,14 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "__GITLAB_CREDENTIAL_ID__",
-          "name": "__GITLAB_CREDENTIAL_NAME__"
+          "id": "QHpWT7FE12mKF6m9",
+          "name": "Header Auth account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "const CONFIG = { GITLAB_HOST: '__GITLAB_HOST__', GITLAB_PROJECT: '__GITLAB_PROJECT__' };\nconst mrs = $input.all().map(i => i.json);\n\nconst toReview = mrs.filter(mr => {\n  const labels = (mr.labels || []);\n  const hasInProgress = labels.includes('ai-review::in-progress');\n  const reviewedSha = labels.find(l => l.startsWith('ai-review::sha:'))?.replace('ai-review::sha:', '');\n  return !hasInProgress && reviewedSha !== mr.sha;\n});\n\nif (toReview.length === 0) return [];\n\nconst mr = toReview[0];\nreturn [{\n  json: {\n    mr_iid: mr.iid,\n    mr_title: mr.title,\n    mr_url: mr.web_url,\n    source_branch: mr.source_branch,\n    target_branch: mr.target_branch,\n    author: mr.author?.username,\n    project_path: CONFIG.GITLAB_PROJECT,\n    gitlab_host: CONFIG.GITLAB_HOST,\n    sha: mr.sha,\n    reviewers: (mr.reviewers || []).map(r => r.username),\n    labels: mr.labels || []\n  }\n}];"
+        "jsCode": "const CONFIG = { GITLAB_HOST: 'gitlab.42dot.ai', GITLAB_PROJECT: 'tms/appius' };\nconst mrs = $input.all().map(i => i.json);\n\nconst toReview = mrs.filter(mr => {\n  const labels = mr.labels || [];\n  const hasInProgress = labels.includes('ai-review::in-progress');\n  const reviewedSha = labels.find(l => l.startsWith('ai-review::sha:'))?.replace('ai-review::sha:', '');\n  return !hasInProgress && reviewedSha !== mr.sha;\n});\n\nif (toReview.length === 0) return [];\n\nconst mr = toReview[0];\nreturn [{\n  json: {\n    mr_iid: mr.iid,\n    mr_title: mr.title,\n    mr_url: mr.web_url,\n    source_branch: mr.source_branch,\n    target_branch: mr.target_branch,\n    author: mr.author?.username,\n    project_path: CONFIG.GITLAB_PROJECT,\n    gitlab_host: CONFIG.GITLAB_HOST,\n    sha: mr.sha,\n    reviewers: (mr.reviewers || []).map(r => r.username),\n    labels: mr.labels || []\n  }\n}];"
       },
       "id": "filter-mrs",
       "name": "Filter",
@@ -99,8 +99,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "__GITLAB_CREDENTIAL_ID__",
-          "name": "__GITLAB_CREDENTIAL_NAME__"
+          "id": "QHpWT7FE12mKF6m9",
+          "name": "Header Auth account"
         }
       },
       "onError": "continueRegularOutput"
@@ -123,15 +123,15 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "__GITLAB_CREDENTIAL_ID__",
-          "name": "__GITLAB_CREDENTIAL_NAME__"
+          "id": "QHpWT7FE12mKF6m9",
+          "name": "Header Auth account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "const AI_MARKER = 'AI Code Review';\nconst mr = $('Filter').first().json;\nconst discussions = $input.all().map(i => i.json);\n\nconst threads = [];\n\nfor (const d of discussions) {\n  const notes = d.notes || [];\n  if (notes.length === 0) continue;\n  \n  const isAINote = (n) => (n.body || '').split('\\n')[0].includes(AI_MARKER);\n  const isUserNote = (n) => !n.system && !isAINote(n);\n  \n  const hasAI = notes.some(isAINote);\n  const hasUserReply = notes.some(isUserNote);\n  \n  if (hasAI && !hasUserReply) continue;\n  \n  const thread = { notes: [], position: null };\n  \n  for (const note of notes) {\n    if (note.system) continue;\n    \n    const item = {\n      author: note.author?.username,\n      body: (note.body || '').slice(0, 500),\n      isAI: isAINote(note)\n    };\n    \n    if (note.type === 'DiffNote' && note.position && !thread.position) {\n      thread.position = {\n        file: note.position.new_path || note.position.old_path,\n        line: note.position.new_line || note.position.old_line\n      };\n    }\n    \n    thread.notes.push(item);\n  }\n  \n  if (thread.notes.length > 0) threads.push(thread);\n}\n\nreturn { json: { ...mr, threads } };"
+        "jsCode": "const AI_MARKER = 'AI Code Review';\nconst mr = $('Filter').first().json;\nconst discussions = $input.all().map(i => i.json);\n\nconst threads = [];\nfor (const d of discussions) {\n  const notes = d.notes || [];\n  if (notes.length === 0) continue;\n  \n  const isAI = n => (n.body || '').split('\\n')[0].includes(AI_MARKER);\n  const isUser = n => !n.system && !isAI(n);\n  \n  if (notes.some(isAI) && !notes.some(isUser)) continue;\n  \n  const thread = { notes: [], position: null };\n  for (const note of notes) {\n    if (note.system) continue;\n    thread.notes.push({ author: note.author?.username, body: (note.body || '').slice(0, 500), isAI: isAI(note) });\n    if (note.type === 'DiffNote' && note.position && !thread.position) {\n      thread.position = { file: note.position.new_path || note.position.old_path, line: note.position.new_line || note.position.old_line };\n    }\n  }\n  if (thread.notes.length > 0) threads.push(thread);\n}\n\nreturn { json: { ...mr, threads } };"
       },
       "id": "process-notes",
       "name": "Process Notes",
@@ -144,7 +144,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const mr = $input.first().json;\nconst threads = mr.threads || [];\n\nlet prompt = `Review MR !${mr.mr_iid}: ${mr.mr_title}\\n\\n**Branch**: \\`${mr.source_branch}\\` → \\`${mr.target_branch}\\`\\n**Author**: ${mr.author}\\n**URL**: ${mr.mr_url}`;\n\nif (threads.length > 0) {\n  prompt += '\\n\\n## Discussion Threads';\n  for (const thread of threads) {\n    if (thread.position) {\n      prompt += `\\n\\n### \\`${thread.position.file}:${thread.position.line}\\``;\n    } else {\n      prompt += '\\n\\n### General Discussion';\n    }\n    for (const n of thread.notes) {\n      const prefix = n.isAI ? '🤖 AI' : `@${n.author}`;\n      prompt += `\\n- ${prefix}: \"${n.body}\"`;\n    }\n  }\n}\n\nreturn { json: { ...mr, formatted_message: prompt } };"
+        "jsCode": "const mr = $input.first().json;\nconst threads = mr.threads || [];\n\nlet prompt = `Review MR !${mr.mr_iid}: ${mr.mr_title}\\n\\n**Branch**: \\`${mr.source_branch}\\` → \\`${mr.target_branch}\\`\\n**Author**: ${mr.author}\\n**URL**: ${mr.mr_url}`;\n\nif (threads.length > 0) {\n  prompt += '\\n\\n## Discussion Threads';\n  for (const thread of threads) {\n    prompt += thread.position ? `\\n\\n### \\`${thread.position.file}:${thread.position.line}\\`` : '\\n\\n### General Discussion';\n    for (const n of thread.notes) {\n      prompt += `\\n- ${n.isAI ? '🤖 AI' : `@${n.author}`}: \"${n.body}\"`;\n    }\n  }\n}\n\nreturn { json: { ...mr, formatted_message: prompt } };"
       },
       "id": "build-prompt",
       "name": "Build Prompt",
@@ -210,26 +210,82 @@
     },
     {
       "parameters": {
+        "jsCode": "const mr = $('Build Prompt').item.json;\nconst result = $('Execute').item.json;\nconst output = result.structured_output || {};\n\nconst review = {\n  verdict: output.verdict || 'comment',\n  gitlab_comment: output.gitlab_comment || '## 🔍 AI Code Review\\n\\nReview completed.',\n  slack_message: output.slack_message || `*<${mr.mr_url}|!${mr.mr_iid}>* ${mr.mr_title}\\n💬 리뷰 완료`\n};\n\nreturn { json: { mr, review, reviewers: mr.reviewers || [] } };"
+      },
+      "id": "parse-review",
+      "name": "Parse Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        200
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
+        "url": "=https://{{ $json.mr.gitlab_host }}/api/v4/projects/{{ encodeURIComponent($json.mr.project_path) }}/merge_requests/{{ $json.mr.mr_iid }}/notes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ channel: '__MR_REVIEW_CHANNEL__', text: $('Build Message').item.json.message }) }}"
+        "jsonBody": "={{ JSON.stringify({ body: $json.review.gitlab_comment }) }}",
+        "options": {}
       },
-      "id": "post-slack",
-      "name": "Post Slack",
+      "id": "post-gitlab-comment",
+      "name": "Post GitLab Comment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2490,
+        2220,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "QHpWT7FE12mKF6m9",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Parse Review').item.json;\nconst mr = data.mr;\nconst review = data.review;\nconst reviewers = data.reviewers || [];\nconst dashboardUrl = $env.N8N_DASHBOARD_URL;\n\nconst mentions = [];\nfor (const username of reviewers) {\n  if (!username) continue;\n  try {\n    const res = await this.helpers.httpRequest({ method: 'GET', url: `${dashboardUrl}/api/plugins/slack/users`, qs: { q: username, limit: 1 } });\n    if (res.users?.[0]) mentions.push(`<@${res.users[0].id}>`);\n  } catch (e) {}\n}\n\nconst message = review.slack_message + (mentions.length > 0 ? '\\n' + mentions.join(' ') : '');\nreturn { json: { message, mr, review } };"
+      },
+      "id": "build-message",
+      "name": "Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C07HPQBLD9A"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "post-slack",
+      "name": "Post Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2580,
         200
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       }
     },
@@ -249,15 +305,16 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2670,
+        2760,
         200
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "__GITLAB_CREDENTIAL_ID__",
-          "name": "__GITLAB_CREDENTIAL_NAME__"
+          "id": "QHpWT7FE12mKF6m9",
+          "name": "Header Auth account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -275,7 +332,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2850,
+        2940,
         200
       ],
       "onError": "continueRegularOutput"
@@ -301,33 +358,37 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "__GITLAB_CREDENTIAL_ID__",
-          "name": "__GITLAB_CREDENTIAL_NAME__"
+          "id": "QHpWT7FE12mKF6m9",
+          "name": "Header Auth account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ channel: '__MR_REVIEW_CHANNEL__', text: `:x: *MR Review Failed*\\n<${$('Build Prompt').item.json.mr_url}|!${$('Build Prompt').item.json.mr_iid}> ${$('Build Prompt').item.json.mr_title}\\n${$('Success?').item.json.status === 'timeout' ? ':hourglass: Timeout' : ':warning: ' + ($('Success?').item.json.error?.message || 'Unknown error')}` }) }}"
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C07HPQBLD9A"
+        },
+        "text": "={{ `:x: *MR Review Failed*\\n<${$('Build Prompt').item.json.mr_url}|!${$('Build Prompt').item.json.mr_iid}> ${$('Build Prompt').item.json.mr_title}\\n${$('Success?').item.json.status === 'timeout' ? ':hourglass: Timeout' : ':warning: ' + ($('Success?').item.json.error?.message || 'Unknown error')}` }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
       },
       "id": "notify-failure",
       "name": "Notify Failure",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
         2220,
         400
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       }
     },
@@ -351,32 +412,6 @@
         400
       ],
       "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const mr = $('Build Prompt').item.json;\nconst executeResult = $('Execute').item.json;\nconst raw = executeResult.result || '';\n\n// Extract JSON from response (handles prefixed text)\nfunction extractJson(text) {\n  try { return JSON.parse(text); } catch {}\n  const match = text.match(/\\{[\\s\\S]*\"verdict\"[\\s\\S]*\"summary\"[\\s\\S]*\\}/);\n  if (match) try { return JSON.parse(match[0]); } catch {}\n  return null;\n}\n\nlet review = extractJson(raw);\nif (!review || !review.verdict) {\n  review = { verdict: 'error', emoji: ':warning:', summary: 'Failed to parse review', points: [] };\n}\n\nreturn { json: { mr, review, reviewers: mr.reviewers || [] } };"
-      },
-      "id": "parse-review",
-      "name": "Parse Review",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2040,
-        200
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $('Parse Review').item.json;\nconst mr = data.mr;\nconst review = data.review;\nconst reviewers = data.reviewers || [];\nconst dashboardUrl = $env.N8N_DASHBOARD_URL;\n\n// Fetch Slack user IDs for each reviewer (by username)\nconst slackMentions = [];\nfor (const username of reviewers) {\n  if (!username) continue;\n  try {\n    const response = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `${dashboardUrl}/api/plugins/slack/users`,\n      qs: { q: username, limit: 1 }\n    });\n    if (response.users && response.users.length > 0) {\n      slackMentions.push(`<@${response.users[0].id}>`);\n    }\n  } catch (e) {\n    // Skip on error\n  }\n}\n\n// Build Slack message\nconst points = (review.points || []).map(p => `• ${p}`).join('\\n');\nconst mentions = slackMentions.length > 0 ? slackMentions.join(' ') : '';\nconst message = `*<${mr.mr_url}|!${mr.mr_iid}>* ${mr.mr_title}\\n${review.emoji || ''} ${review.summary || ''}\\n${points}${mentions ? '\\n' + mentions : ''}`.trim();\n\nreturn { json: { message, mr, review } };"
-      },
-      "id": "build-message",
-      "name": "Build Message",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2310,
-        200
-      ]
     }
   ],
   "connections": {
@@ -486,6 +521,39 @@
         ]
       ]
     },
+    "Parse Review": {
+      "main": [
+        [
+          {
+            "node": "Post GitLab Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post GitLab Comment": {
+      "main": [
+        [
+          {
+            "node": "Build Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Message": {
+      "main": [
+        [
+          {
+            "node": "Post Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Post Slack": {
       "main": [
         [
@@ -524,28 +592,6 @@
         [
           {
             "node": "Stats Err",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Review": {
-      "main": [
-        [
-          {
-            "node": "Build Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Message": {
-      "main": [
-        [
-          {
-            "node": "Post Slack",
             "type": "main",
             "index": 0
           }

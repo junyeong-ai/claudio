@@ -14,7 +14,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Workflow file names (source of truth)
-WORKFLOW_FILES="slack-mention-handler.json slack-message-handler.json slack-reaction-handler.json slack-feedback-handler.json user-context-handler.json gitlab-mr-review.json"
+WORKFLOW_FILES="slack-mention-handler.json slack-message-handler.json slack-reaction-handler.json slack-feedback-handler.json user-context-handler.json gitlab-mr-review.json auto-fix-scheduler.json"
 
 # Load .env file
 load_env() {
@@ -250,7 +250,10 @@ inject_config() {
     local service_prefix=$(jq -r '.servicePrefix // ""' "$CONFIG_FILE")
     local gitlab_host=$(jq -r '.gitlab.host // "__GITLAB_HOST__"' "$CONFIG_FILE")
     local gitlab_project=$(jq -r '.gitlab.project // "__GITLAB_PROJECT__"' "$CONFIG_FILE")
+    local gitlab_project_encoded=$(echo "$gitlab_project" | sed 's|/|%2F|g')
     local jira_host=$(jq -r '.jira.host // "__JIRA_HOST__"' "$CONFIG_FILE")
+    local jira_email=$(jq -r '.jira.email // ""' "$CONFIG_FILE")
+    local jira_api_token=$(jq -r '.jira.apiToken // ""' "$CONFIG_FILE")
     local mr_review_channel=$(jq -r '.mrReviewChannel // ""' "$CONFIG_FILE")
     local system_project=$(jq -r '.systemProject // "system"' "$CONFIG_FILE")
 
@@ -277,7 +280,10 @@ inject_config() {
     sed_inplace "s|__SERVICE_PREFIX__|$service_prefix|g" "$tmp"
     sed_inplace "s|__GITLAB_HOST__|$gitlab_host|g" "$tmp"
     sed_inplace "s|__GITLAB_PROJECT__|$gitlab_project|g" "$tmp"
+    sed_inplace "s|__GITLAB_PROJECT_ENCODED__|$gitlab_project_encoded|g" "$tmp"
     sed_inplace "s|__JIRA_HOST__|$jira_host|g" "$tmp"
+    sed_inplace "s|__JIRA_EMAIL__|$jira_email|g" "$tmp"
+    sed_inplace "s|__JIRA_API_TOKEN__|$jira_api_token|g" "$tmp"
     sed_inplace "s|__CLAUDIO_PROJECT__|$project|g" "$tmp"
     sed_inplace "s|__SYSTEM_PROJECT__|$system_project|g" "$tmp"
     sed_inplace "s|__MR_REVIEW_CHANNEL__|$mr_review_channel|g" "$tmp"

@@ -53,7 +53,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const e = $('Webhook').item.json.body;\nconst u = $('Get User Info').item.json?.user || {};\nconst name = u.display_name || u.real_name || u.name || null;\nreturn {\n  json: {\n    channel: e.channel,\n    user: e.user,\n    user_name: name,\n    text: e.text,\n    ts: e.ts,\n    thread_ts: e.thread_ts || e.ts,\n    project: '__CLAUDIO_PROJECT__'\n  }\n};"
+        "jsCode": "const e = $('Webhook').item.json.body;\nconst u = $('Get User Info').item.json?.user || {};\nconst name = u.display_name || u.real_name || u.name || null;\nreturn {\n  json: {\n    channel: e.channel,\n    user: e.user,\n    user_name: name,\n    text: e.text,\n    ts: e.ts,\n    thread_ts: e.thread_ts || e.ts,\n    project: 'capora'\n  }\n};"
       },
       "id": "parse",
       "name": "Parse",
@@ -117,8 +117,8 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -210,34 +210,42 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify(Object.assign({ channel: $('Parse').item.json.channel, text: $('Format Static').item.json.text }, $('Parse').item.json.thread_ts ? { thread_ts: $('Parse').item.json.thread_ts } : {})) }}"
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Parse').item.json.channel }}"
+        },
+        "text": "={{ $('Format Static').item.json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Parse').item.json.thread_ts }}"
+            }
+          }
+        }
       },
       "id": "reply-static",
       "name": "Reply Static",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
         2130,
         180
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       }
     },
@@ -352,8 +360,8 @@
       "parameters": {
         "jsCode": "return { json: { text: $json.text, execution_id: $('Success?').item.json.id } };"
       },
-      "id": "merge-format",
-      "name": "Merge",
+      "id": "extract-result",
+      "name": "Extract Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -383,41 +391,49 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify(Object.assign({ channel: $('Parse').item.json.channel, text: $('Merge').item.json.text }, $('Parse').item.json.thread_ts ? { thread_ts: $('Parse').item.json.thread_ts } : {})) }}"
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Parse').item.json.channel }}"
+        },
+        "text": "={{ $('Extract Result').item.json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Parse').item.json.thread_ts }}"
+            }
+          }
+        }
       },
       "id": "reply",
       "name": "Reply",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
         2670,
         300
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       }
     },
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $env.N8N_API_URL }}/v1/executions/{{ $('Merge').item.json.execution_id }}",
+        "url": "={{ $env.N8N_API_URL }}/v1/executions/{{ $('Extract Result').item.json.execution_id }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ reply_channel: $json.channel, reply_ts: $json.ts }) }}",
@@ -457,8 +473,8 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -485,8 +501,8 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -497,7 +513,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-mention-handler', execution_id: $('Merge').item.json.execution_id, status: 'success', duration_ms: $('Execute').item.json.duration_ms, metadata: { agent: $('Build Prompt').item.json.agent, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-mention-handler', execution_id: $('Extract Result').item.json.execution_id, status: 'success', duration_ms: $('Execute').item.json.duration_ms, metadata: { agent: $('Build Prompt').item.json.agent, channel: $('Parse').item.json.channel, user: $('Parse').item.json.user } }) }}",
         "options": {
           "timeout": 5000
         }
@@ -555,8 +571,8 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -583,8 +599,8 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       }
     },
@@ -603,26 +619,34 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify(Object.assign({ channel: $('Parse').item.json.channel, text: $json.text }, $('Parse').item.json.thread_ts ? { thread_ts: $('Parse').item.json.thread_ts } : {})) }}"
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Parse').item.json.channel }}"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Parse').item.json.thread_ts }}"
+            }
+          }
+        }
       },
       "id": "reply-err",
       "name": "Reply Err",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
         2760,
         540
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       }
     },
@@ -669,8 +693,8 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -697,8 +721,8 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -878,14 +902,14 @@
       "main": [
         [
           {
-            "node": "Merge",
+            "node": "Extract Result",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Merge": {
+    "Extract Result": {
       "main": [
         [
           {

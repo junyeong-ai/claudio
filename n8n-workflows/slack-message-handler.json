@@ -35,14 +35,14 @@
     },
     {
       "parameters": {
-        "jsCode": "const INCIDENT_CHANNELS = '__INCIDENT_CHANNELS__'.split(',').filter(Boolean);\nconst SERVICE_PREFIX = '__SERVICE_PREFIX__';\nconst e = $('Webhook').item.json.body;\n\nif (INCIDENT_CHANNELS.length > 0 && !INCIDENT_CHANNELS.includes(e.channel)) return { json: { skip: true } };\n\nconst att = (e.attachments || []).find(a => a.callback_id === 'datadog-event-message');\nif (!att) return { json: { skip: true } };\n\nconst title = att.title || '';\nif (!title.startsWith('Triggered:')) return { json: { skip: true } };\n\nconst titleMatch = title.match(/^Triggered:\\s*\\[([^\\]]+)\\]\\s*\\[([^\\]]+)\\]\\s*[^,]+,\\s*(.+)$/);\nconst env = titleMatch ? titleMatch[2] : 'real';\nlet service = titleMatch ? titleMatch[3].trim() : 'unknown';\nif (SERVICE_PREFIX && service.startsWith(SERVICE_PREFIX)) service = service.replace(SERVICE_PREFIX, '');\n\nconst text = att.text || '';\nconst serviceMatch = text.match(/service\\s*:\\s*(.+)/i);\nconst msgMatch = text.match(/log message\\s*:\\s*(.+)/i);\nconst tsMatch = text.match(/log timestamp:\\s*(\\S+)/i);\nconst traceMatch = text.match(/log traceId\\s*:\\s*(\\S+)/i);\n\nif (serviceMatch) { service = serviceMatch[1].trim(); if (SERVICE_PREFIX) service = service.replace(new RegExp('^' + SERVICE_PREFIX.replace('.', '\\\\.')), ''); }\n\nconst alert = {\n  env,\n  service,\n  traceId: traceMatch ? traceMatch[1] : '',\n  logTimestamp: tsMatch ? tsMatch[1] : '',\n  logMessage: msgMatch ? msgMatch[1].trim() : '',\n  monitorUrl: att.title_link || '',\n  rawText: text\n};\n\nconst formatted_message = `Analyze Incident Alert\n\n**Environment**: ${alert.env}\n**Service**: ${alert.service}\n**Trace ID**: ${alert.traceId || 'N/A'}\n**Log Timestamp**: ${alert.logTimestamp || 'N/A'}\n**Log Message**: ${alert.logMessage || 'N/A'}\n**Monitor URL**: ${alert.monitorUrl || 'N/A'}`;\n\nreturn {\n  json: {\n    skip: false,\n    channel: e.channel,\n    ts: e.ts,\n    thread_ts: e.thread_ts || e.ts,\n    alert,\n    formatted_message\n  }\n};"
+        "jsCode": "const INCIDENT_CHANNELS = 'C06TKTU8KUH,C064DCKQRHU'.split(',').filter(Boolean);\nconst e = $('Webhook').item.json.body;\nif (INCIDENT_CHANNELS.length > 0 && !INCIDENT_CHANNELS.includes(e.channel)) return { json: { skip: true } };\nconst att = (e.attachments || []).find(a => (a.title || '').startsWith('Triggered:'));\nif (!att) return { json: { skip: true } };\n\nconst title = att.title || '', text = att.text || '';\nconst tm = title.match(/^Triggered:\\s*\\[([^\\]]+)\\]\\s*\\[([^\\]]+)\\]\\s*([^,]+),\\s*(.+?)\\s+on\\s+env:(\\w+)$/);\nconst qm = text.match(/monitored query:\\s*<[^|]+\\|`?([^`>]+)`?>/);\nconst query = qm ? qm[1].replace(/\\\\@/g, '@') : '';\nconst sm = query.match(/service:([^\\s]+)/);\n\nconst alert = {\n  severity: tm?.[1] || 'unknown',\n  project: tm?.[2] || 'unknown',\n  alert_name: tm?.[3] || 'unknown',\n  env: tm?.[5] || 'unknown',\n  service: sm?.[1] || '',\n  trace_id: text.match(/log traceId\\s*:\\s*(\\S+)/)?.[1]?.replace(/\\\\+$/, '') || '',\n  log_timestamp: text.match(/log timestamp:\\s*(\\S+)/)?.[1]?.replace(/\\\\+$/, '') || '',\n  log_message: text.match(/log message\\s*:\\s*(.+?)(?:\\\\|\\n|$)/)?.[1]?.replace(/<[^|>]+\\|([^>]+)>/g, '$1').trim() || '',\n  query\n};\n\nconst prompt = `Analyze Incident Alert\\n\\n## Alert Info\\n- Severity: ${alert.severity}\\n- Project: ${alert.project}\\n- Environment: ${alert.env}\\n- Service: ${alert.service}\\n- Alert Name: ${alert.alert_name}\\n\\n## Log Details\\n- Trace ID: ${alert.trace_id || 'N/A'}\\n- Timestamp: ${alert.log_timestamp || 'N/A'}\\n- Message: ${alert.log_message || 'N/A'}\\n\\n## Datadog Query\\n${query || 'N/A'}`;\n\nreturn { json: { skip: false, channel: e.channel, ts: e.ts, thread_ts: e.thread_ts || e.ts, prompt, alert } };"
       },
       "id": "parse",
       "name": "Parse",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        780,
+        600,
         300
       ]
     },
@@ -68,12 +68,12 @@
         },
         "options": {}
       },
-      "id": "should-process",
+      "id": "incident",
       "name": "Incident?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        960,
+        780,
         300
       ]
     },
@@ -94,13 +94,13 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        1140,
+        960,
         300
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -111,9 +111,9 @@
         "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ user_message: $json.formatted_message, agent: 'Incident Analyzer', source: 'slack', requester: 'slack-incident-workflow', metadata: { channel: $json.channel, thread_ts: $json.thread_ts, service: $json.alert.service, env: $json.alert.env, triggered_by: 'datadog', workflow_execution_id: $executionId } }) }}",
+        "jsonBody": "={{ JSON.stringify({ user_message: $('Parse').item.json.prompt, agent: 'Incident Analyzer', source: 'slack', requester: 'slack-incident-workflow', metadata: { channel: $('Parse').item.json.channel, thread_ts: $('Parse').item.json.thread_ts, service: $('Parse').item.json.alert.service, env: $('Parse').item.json.alert.env, triggered_by: 'datadog', workflow_execution_id: $executionId } }) }}",
         "options": {
-          "timeout": 330000
+          "timeout": 660000
         }
       },
       "id": "analyze",
@@ -121,7 +121,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1320,
+        1140,
         300
       ],
       "onError": "continueRegularOutput"
@@ -148,94 +148,101 @@
         },
         "options": {}
       },
-      "id": "check-status",
+      "id": "success",
       "name": "Success?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1500,
+        1320,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst p = $('Parse').item.json;\nlet report = r.result || '';\nlet meta = {};\n\ntry {\n  const m = report.match(/```json\\s*([\\s\\S]*?)\\s*```/);\n  if (m) { meta = JSON.parse(m[1]); report = report.replace(/```json[\\s\\S]*?```/g, '').trim(); }\n} catch {}\n\nreturn { json: { ...p, report, meta, execution_id: r.id, context: JSON.stringify({ alert: p.alert, analysis: meta }) } };"
+        "jsCode": "const r = $input.first().json, p = $('Parse').item.json, meta = r.structured_output || {};\nconst can_auto_fix = meta.can_auto_fix === true;\nreturn { json: {\n  channel: p.channel, ts: p.ts, thread_ts: p.thread_ts, execution_id: r.id, alert: p.alert,\n  slack_report: meta.slack_report || ':warning: Analysis completed but no report generated',\n  jira_title: meta.jira_title || `[BUG] ${p.alert.service} - ${p.alert.alert_name}`,\n  can_auto_fix,\n  context: JSON.stringify({ alert: p.alert, analysis: meta, can_auto_fix })\n}};"
       },
-      "id": "extract-meta",
-      "name": "Extract Meta",
+      "id": "extract",
+      "name": "Extract",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "position": [
+        1500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Extract').item.json.channel }}"
+        },
+        "text": "={{ $('Extract').item.json.slack_report }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Extract').item.json.thread_ts }}"
+            }
+          }
+        }
+      },
+      "id": "post-report",
+      "name": "Post Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
         1680,
         250
-      ]
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      }
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_API_URL }}/v1/format/mrkdwn",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ text: $json.report }) }}",
-        "options": {
-          "timeout": 5000
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Extract').item.json.channel }}"
+        },
+        "text": "={{ $('Extract').item.json.can_auto_fix ? `:jira-new: *${$('Extract').item.json.jira_title}*\\n:one: JIRA 생성 | :two: JIRA + 자동수정` : `:jira-new: *${$('Extract').item.json.jira_title}*\\n:one: JIRA 생성` }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Extract').item.json.thread_ts }}"
+            }
+          }
         }
       },
-      "id": "format-mrkdwn",
-      "name": "Format",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1770,
-        250
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const e = $('Extract Meta').item.json;\nreturn { json: { ...e, report: $json.text } };"
-      },
-      "id": "process",
-      "name": "Process",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1860,
-        250
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify(Object.assign({ channel: $json.channel, text: $json.report }, $json.thread_ts ? { thread_ts: $json.thread_ts } : {})) }}"
-      },
-      "id": "post",
-      "name": "Post Report",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "post-options",
+      "name": "Post Options",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
       "position": [
         1860,
         250
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       }
     },
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $env.N8N_API_URL }}/v1/executions/{{ $('Process').item.json.execution_id }}",
+        "url": "={{ $env.N8N_API_URL }}/v1/executions/{{ $('Extract').item.json.execution_id }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ reply_channel: $json.channel, reply_ts: $json.ts, context: $('Process').item.json.context }) }}",
+        "jsonBody": "={{ JSON.stringify({ options_ts: $json.ts, reply_channel: $('Extract').item.json.channel, reply_ts: $('Extract').item.json.thread_ts, context: $('Extract').item.json.context }) }}",
         "options": {
           "timeout": 5000
         }
@@ -257,12 +264,12 @@
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "={{ $('Post Report').item.json.channel }}"
+          "value": "={{ $('Extract').item.json.channel }}"
         },
-        "timestamp": "={{ $('Post Report').item.json.ts }}",
+        "timestamp": "={{ $('Post Options').item.json.message_timestamp }}",
         "name": "one"
       },
-      "id": "add-1",
+      "id": "add-one",
       "name": ":one:",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
@@ -272,8 +279,95 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Extract').item.json.can_auto_fix }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "can-autofix",
+      "name": "Can AutoFix?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "add",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Extract').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Post Options').item.json.message_timestamp }}",
+        "name": "two"
+      },
+      "id": "add-two",
+      "name": ":two:",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "reaction",
+        "operation": "remove",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Extract').item.json.channel }}"
+        },
+        "timestamp": "={{ $('Extract').item.json.ts }}",
+        "name": "loading"
+      },
+      "id": "remove-loading",
+      "name": "Remove Loading",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        250
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -285,56 +379,13 @@
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "={{ $('Post Report').item.json.channel }}"
+          "value": "={{ $('Extract').item.json.channel }}"
         },
-        "timestamp": "={{ $('Post Report').item.json.ts }}",
-        "name": "two"
+        "timestamp": "={{ $('Extract').item.json.ts }}",
+        "name": "white_check_mark"
       },
-      "id": "add-2",
-      "name": ":two:",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.2,
-      "position": [
-        2220,
-        300
-      ],
-      "credentials": {
-        "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "mode": "combine",
-        "combinationMode": "multiplex",
-        "options": {}
-      },
-      "id": "merge-reactions",
-      "name": "Merge",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3.1,
-      "position": [
-        2400,
-        250
-      ]
-    },
-    {
-      "parameters": {
-        "resource": "reaction",
-        "operation": "remove",
-        "channelId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "={{ $('Process').item.json.channel }}"
-        },
-        "timestamp": "={{ $('Process').item.json.ts }}",
-        "name": "loading"
-      },
-      "id": "remove-loading-ok",
-      "name": "Done OK",
+      "id": "done",
+      "name": "✅",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
@@ -343,31 +394,10 @@
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-message-handler', execution_id: $('Process').item.json.execution_id, status: 'success', duration_ms: $('Analyze').item.json.duration_ms, metadata: { service: $('Parse').item.json.alert.service, env: $('Parse').item.json.alert.env } }) }}",
-        "options": {
-          "timeout": 5000
-        }
-      },
-      "id": "record-stats-ok",
-      "name": "Stats OK",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2850,
-        250
-      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -383,17 +413,17 @@
         "name": "loading"
       },
       "id": "remove-loading-err",
-      "name": "Done Err",
+      "name": "Remove Loading Err",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        1680,
+        1500,
         450
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -415,103 +445,62 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        1860,
+        1680,
         450
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "const r = $('Success?').item.json;\nconst p = $('Parse').item.json;\nconst msg = r.status === 'timeout' ? `:hourglass: Analysis timeout (${p.alert.service})` : `:x: Analysis failed: ${r.error?.message || 'Unknown'}`;\nreturn { json: { text: msg, execution_id: r.id } };"
+        "jsCode": "const r = $('Success?').item.json, p = $('Parse').item.json;\nreturn { json: { text: r.status === 'timeout' ? `:hourglass: Analysis timeout (${p.alert.service})` : `:x: Analysis failed: ${r.error?.message || 'Unknown'}` } };"
       },
       "id": "err-msg",
       "name": "Err Msg",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2040,
+        1860,
         450
       ]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "slackApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify(Object.assign({ channel: $('Parse').item.json.channel, text: $json.text }, $('Parse').item.json.thread_ts ? { thread_ts: $('Parse').item.json.thread_ts } : {})) }}"
-      },
-      "id": "reply-err",
-      "name": "Reply Err",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2220,
-        450
-      ],
-      "credentials": {
-        "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: 'slack-message-handler', execution_id: $json.execution_id, status: $('Success?').item.json.status === 'timeout' ? 'timeout' : 'error', duration_ms: $('Analyze').item.json.duration_ms, metadata: { service: $('Parse').item.json.alert.service, env: $('Parse').item.json.alert.env, error: $('Success?').item.json.error?.message } }) }}",
-        "options": {
-          "timeout": 5000
-        }
-      },
-      "id": "record-stats-err",
-      "name": "Stats Err",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2400,
-        450
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "resource": "reaction",
-        "operation": "add",
+        "select": "channel",
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "={{ $(\"Parse\").item.json.channel }}"
+          "value": "={{ $('Parse').item.json.channel }}"
         },
-        "timestamp": "={{ $(\"Parse\").item.json.ts }}",
-        "name": "white_check_mark"
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Parse').item.json.thread_ts }}"
+            }
+          }
+        }
       },
-      "id": "add-check-ok",
-      "name": "✅",
+      "id": "reply-err",
+      "name": "Reply Err",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2670,
-        250
+        2040,
+        450
       ],
       "credentials": {
         "slackApi": {
-          "id": "__SLACK_CREDENTIAL_ID__",
-          "name": "__SLACK_CREDENTIAL_NAME__"
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
         }
-      },
-      "onError": "continueRegularOutput"
+      }
     }
   ],
   "connections": {
@@ -586,43 +575,21 @@
       "main": [
         [
           {
-            "node": "Extract Meta",
+            "node": "Extract",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Done Err",
+            "node": "Remove Loading Err",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Extract Meta": {
-      "main": [
-        [
-          {
-            "node": "Format",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format": {
-      "main": [
-        [
-          {
-            "node": "Process",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Process": {
+    "Extract": {
       "main": [
         [
           {
@@ -634,6 +601,17 @@
       ]
     },
     "Post Report": {
+      "main": [
+        [
+          {
+            "node": "Post Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Options": {
       "main": [
         [
           {
@@ -653,7 +631,7 @@
             "index": 0
           },
           {
-            "node": ":two:",
+            "node": "Can AutoFix?",
             "type": "main",
             "index": 0
           }
@@ -664,36 +642,26 @@
       "main": [
         [
           {
-            "node": "Merge",
+            "node": "Remove Loading",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    ":two:": {
+    "Can AutoFix?": {
       "main": [
         [
           {
-            "node": "Merge",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Merge": {
-      "main": [
-        [
-          {
-            "node": "Done OK",
+            "node": ":two:",
             "type": "main",
             "index": 0
           }
-        ]
+        ],
+        []
       ]
     },
-    "Done OK": {
+    "Remove Loading": {
       "main": [
         [
           {
@@ -704,7 +672,7 @@
         ]
       ]
     },
-    "Done Err": {
+    "Remove Loading Err": {
       "main": [
         [
           {
@@ -731,28 +699,6 @@
         [
           {
             "node": "Reply Err",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Reply Err": {
-      "main": [
-        [
-          {
-            "node": "Stats Err",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "✅": {
-      "main": [
-        [
-          {
-            "node": "Stats OK",
             "type": "main",
             "index": 0
           }

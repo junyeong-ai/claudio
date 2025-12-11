@@ -1,0 +1,767 @@
+{
+  "name": "Auto Fix Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Every 10 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 5,
+        "options": {
+          "jql": "project = TMS AND labels = \"ai:auto-fix\" AND status = BACKLOG ORDER BY created ASC"
+        }
+      },
+      "id": "fetch-tickets",
+      "name": "Fetch Tickets",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        420,
+        300
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.key }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-tickets",
+      "name": "Has Tickets?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const issue = $input.item.json;\nconst status = issue.fields?.status?.name || '';\nconst needsToDoTransition = status === 'Backlog';\nconst today = new Date().toISOString().split('T')[0];\nconst nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\nreturn { json: { ...issue, needsToDoTransition, startDate: today, dueDate: nextWeek } };"
+      },
+      "id": "check-status",
+      "name": "Check Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.needsToDoTransition }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-backlog",
+      "name": "Is Backlog?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "issue",
+        "operation": "update",
+        "issueKey": "={{ $json.key }}",
+        "updateFields": {
+          "customFieldsUi": {
+            "customFieldsValues": [
+              {
+                "fieldId": {
+                  "value": "customfield_10015",
+                  "mode": "id"
+                },
+                "fieldValue": "={{ $json.startDate }}"
+              }
+            ]
+          },
+          "duedate": "={{ $json.dueDate }}"
+        }
+      },
+      "id": "set-dates",
+      "name": "Set Dates",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        250
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "issue",
+        "operation": "update",
+        "issueKey": "={{ $('Check Status').item.json.key }}",
+        "updateFields": {
+          "customFieldsUi": {
+            "customFieldsValues": [
+              {
+                "fieldId": {
+                  "value": "customfield_10015",
+                  "mode": "id"
+                },
+                "fieldValue": "={{ $('Check Status').item.json.startDate }}"
+              }
+            ]
+          },
+          "duedate": "={{ $('Check Status').item.json.dueDate }}",
+          "statusId": "51"
+        }
+      },
+      "id": "transition-to-todo",
+      "name": "To Do",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        250
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "issue",
+        "operation": "update",
+        "issueKey": "={{ $('Check Status').item.json.key }}",
+        "updateFields": {
+          "statusId": "21"
+        }
+      },
+      "id": "transition-in-progress",
+      "name": "In Progress",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const issue = $('Check Status').item.json;\nconst prompt = `Auto-fix JIRA ticket\\n\\n**JIRA Key**: ${issue.key}\\n**Summary**: ${issue.fields?.summary || 'N/A'}`;\nreturn { json: { jira_key: issue.key, jira_summary: issue.fields?.summary, prompt } };"
+      },
+      "id": "build-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.prompt, agent: 'Auto Fixer', source: 'scheduler', requester: 'auto-fix-scheduler', metadata: { jira_key: $json.jira_key, workflow_execution_id: $executionId } }) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "auto-fix",
+      "name": "Auto Fix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Build Prompt').item.json;\nconst r = $input.item.json;\nlet res = { fixed: false, branch_name: '', commit_sha: '', files_changed: [], summary: '', error: '' };\nif (r.status !== 'completed') res.error = r.error?.message || 'API error';\nelse if (r.structured_output) res = { ...res, ...r.structured_output };\nelse res.error = 'No structured output';\n\n// CODEOWNERS 기반 리뷰어 선택\nconst REVIEWERS = {\n  frontend: ['suah.kang', 'yohan.shin', 'myunggyu.lee'],\n  backend: ['hyohyun.baek', 'hohwan.an', 'seungmoo.lee', 'junyeong.eom']\n};\nconst files = res.files_changed || [];\nconst hasFrontend = files.some(f => f.startsWith('front/'));\nconst hasBackend = files.some(f => f.startsWith('services/'));\nlet reviewers = [];\nif (hasFrontend) reviewers.push(REVIEWERS.frontend[0]);\nif (hasBackend) reviewers.push(REVIEWERS.backend[0]);\nif (reviewers.length === 0) reviewers.push(REVIEWERS.backend[0]);\n\nreturn { json: { ...prev, ...res, execution_id: r.id, reviewers } };"
+      },
+      "id": "parse-result",
+      "name": "Parse Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fixed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-fixed",
+      "name": "Fixed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://gitlab.42dot.ai/api/v4/projects/tms%2Fappius/members/all?per_page=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "get-reviewers",
+      "name": "Get Reviewers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        250
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "QHpWT7FE12mKF6m9",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Parse Result').item.json;\nconst members = $input.first().json || [];\nconst reviewerUsernames = prev.reviewers || [];\nconst reviewerIds = [];\nfor (const username of reviewerUsernames) {\n  const member = members.find(m => m.username === username);\n  if (member) reviewerIds.push(member.id);\n}\nreturn { json: { ...prev, reviewer_ids: reviewerIds } };"
+      },
+      "id": "map-reviewer-ids",
+      "name": "Map Reviewer IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2580,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gitlab.42dot.ai/api/v4/projects/tms%2Fappius/merge_requests",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source_branch: $json.branch_name, target_branch: 'main', title: `[${$json.jira_key}] ${$json.jira_summary}`, description: `## Auto-fix\\n\\n${$json.summary}\\n\\n**Files changed:**\\n${($json.files_changed || []).map(f => '- ' + f).join('\\n')}\\n\\n---\\n🤖 Generated by Auto Fixer`, remove_source_branch: true, reviewer_ids: $json.reviewer_ids }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "create-mr",
+      "name": "Create MR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2760,
+        250
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "QHpWT7FE12mKF6m9",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Parse Result').item.json;\nconst mr = $input.item.json;\nconst mr_url = mr.web_url || null;\nconst mr_iid = mr.iid || null;\nreturn { json: { ...prev, mr_url, mr_iid } };"
+      },
+      "id": "parse-mr",
+      "name": "Parse MR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2940,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "issue",
+        "operation": "update",
+        "issueKey": "={{ $json.jira_key }}",
+        "updateFields": {
+          "statusId": "31"
+        }
+      },
+      "id": "transition-resolved",
+      "name": "Resolved",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        250
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "issueKey": "={{ $('Parse MR').item.json.jira_key }}",
+        "updateFields": {
+          "labels": [
+            "ai:auto-fixed"
+          ]
+        }
+      },
+      "id": "update-label-success",
+      "name": "Label Success",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2940,
+        250
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "issueComment",
+        "operation": "add",
+        "issueKey": "={{ $('Parse MR').item.json.jira_key }}",
+        "comment": "=🤖 *Auto-fix completed*\n\n• Branch: {{$('Parse MR').item.json.branch_name}}\n• MR: {{$('Parse MR').item.json.mr_url || 'N/A'}}\n• Commit: {{$('Parse MR').item.json.commit_sha || 'N/A'}}\n\n{{$('Parse MR').item.json.summary}}"
+      },
+      "id": "jira-comment-success",
+      "name": "Comment Success",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        250
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "issueKey": "={{ $json.jira_key }}",
+        "updateFields": {
+          "labels": [
+            "ai:auto-fix-failed"
+          ]
+        }
+      },
+      "id": "update-label-fail",
+      "name": "Label Fail",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        400
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "issueComment",
+        "operation": "add",
+        "issueKey": "={{ $('Parse Result').item.json.jira_key }}",
+        "comment": "=🤖 *Auto-fix failed*\n\n{{ $('Parse Result').item.json.error || $('Parse Result').item.json.summary || 'Unknown error' }}"
+      },
+      "id": "jira-comment-fail",
+      "name": "Comment Fail",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2580,
+        400
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "issue",
+        "operation": "update",
+        "issueKey": "={{ $('Parse Result').item.json.jira_key }}",
+        "updateFields": {
+          "statusId": "61"
+        }
+      },
+      "id": "transition-back",
+      "name": "Back to Backlog",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2760,
+        400
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "5iuB3iFLJn8tZPhM",
+          "name": "Jira SW Cloud account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Every 10 min": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tickets": {
+      "main": [
+        [
+          {
+            "node": "Has Tickets?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Tickets?": {
+      "main": [
+        [
+          {
+            "node": "Check Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Check Status": {
+      "main": [
+        [
+          {
+            "node": "Is Backlog?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Backlog?": {
+      "main": [
+        [
+          {
+            "node": "Set Dates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "In Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Dates": {
+      "main": [
+        [
+          {
+            "node": "To Do",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Do": {
+      "main": [
+        [
+          {
+            "node": "In Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "In Progress": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Auto Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Fix": {
+      "main": [
+        [
+          {
+            "node": "Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Result": {
+      "main": [
+        [
+          {
+            "node": "Fixed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fixed?": {
+      "main": [
+        [
+          {
+            "node": "Get Reviewers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Label Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Reviewers": {
+      "main": [
+        [
+          {
+            "node": "Map Reviewer IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Reviewer IDs": {
+      "main": [
+        [
+          {
+            "node": "Create MR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create MR": {
+      "main": [
+        [
+          {
+            "node": "Parse MR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse MR": {
+      "main": [
+        [
+          {
+            "node": "Resolved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolved": {
+      "main": [
+        [
+          {
+            "node": "Label Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Success": {
+      "main": [
+        [
+          {
+            "node": "Comment Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Fail": {
+      "main": [
+        [
+          {
+            "node": "Comment Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment Fail": {
+      "main": [
+        [
+          {
+            "node": "Back to Backlog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}
