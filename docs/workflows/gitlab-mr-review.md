@@ -9,7 +9,7 @@ GitLab MR을 자동으로 코드 리뷰하는 스케줄 기반 워크플로우.
 | 항목 | 값 |
 |------|-----|
 | **트리거** | Schedule (1분 간격) |
-| **주요 기능** | MR 자동 감지, 코드 리뷰, Slack 알림 |
+| **주요 기능** | MR 자동 감지, 코드 리뷰, GitLab 코멘트, Slack 알림 |
 
 ---
 
@@ -31,8 +31,8 @@ GitLab MR을 자동으로 코드 리뷰하는 스케줄 기반 워크플로우.
                          ┌─────────────────────┘
                          ▼
                     ┌─────────┐
-                    │Label    │
-                    │In-Prog  │
+                    │   In    │
+                    │Progress │
                     └────┬────┘
                          │
                          ▼
@@ -57,7 +57,7 @@ GitLab MR을 자동으로 코드 리뷰하는 스케줄 기반 워크플로우.
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        MR Reviewer Agent                             │
 │                                                                      │
-│  glab mr view/diff → 분석 → JSON 결과                                │
+│  glab mr view/diff → 분석 → Structured Output                        │
 │                                                                      │
 └───────────────────────────────────┬─────────────────────────────────┘
                                     │
@@ -67,18 +67,70 @@ GitLab MR을 자동으로 코드 리뷰하는 스케줄 기반 워크플로우.
               │  Success  │                   │  Failure  │
               └─────┬─────┘                   └─────┬─────┘
                     │                               │
-        ┌───────────┴───────────┐                   │
-        ▼                       ▼                   ▼
-  ┌───────────┐          ┌───────────┐       ┌───────────┐
-  │Parse JSON │          │Label Done │       │Label Failed│
-  │Build Msg  │          │           │       │Notify Err  │
-  └─────┬─────┘          └───────────┘       └───────────┘
-        │
-        ▼
-  ┌───────────┐
-  │Post Slack │
-  └───────────┘
+                    ▼                               ▼
+              ┌───────────┐                   ┌───────────┐
+              │Parse      │                   │  Failed   │
+              │Review     │                   │  Label    │
+              └─────┬─────┘                   └─────┬─────┘
+                    │                               │
+                    ▼                               ▼
+              ┌───────────┐                   ┌───────────┐
+              │Post GitLab│                   │  Notify   │◄── Native Slack Node
+              │ Comment   │                   │ Failure   │
+              └─────┬─────┘                   └─────┬─────┘
+                    │                               │
+                    ▼                               ▼
+              ┌───────────┐                   ┌───────────┐
+              │Build      │                   │Stats Err  │
+              │Message    │                   └───────────┘
+              └─────┬─────┘
+                    │
+                    ▼
+              ┌───────────┐
+              │Post Slack │◄── Native Slack Node
+              └─────┬─────┘
+                    │
+                    ▼
+              ┌───────────┐
+              │   Done    │
+              │   Label   │
+              └─────┬─────┘
+                    │
+                    ▼
+              ┌───────────┐
+              │ Stats OK  │
+              └───────────┘
 ```
+
+---
+
+## Structured Output
+
+MR Reviewer 에이전트가 반환하는 `structured_output`:
+
+```json
+{
+  "verdict": "approve",
+  "gitlab_comment": "## 🔍 AI Code Review\n\n코드 품질이 우수합니다...",
+  "slack_message": "*<!123>* Add payment retry\n✅ Clean implementation"
+}
+```
+
+### 필드 설명
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `verdict` | string | `approve` / `changes` / `comment` |
+| `gitlab_comment` | string | GitLab MR에 작성할 코멘트 (AI 마커 포함) |
+| `slack_message` | string | Slack 채널에 게시할 메시지 |
+
+### Verdict 의미
+
+| Verdict | 의미 | 이모지 |
+|---------|------|--------|
+| `approve` | 머지 가능 | ✅ |
+| `changes` | 수정 필요 | ⚠️ |
+| `comment` | 코멘트/논의 필요 | 💬 |
 
 ---
 
@@ -148,12 +200,12 @@ return {
   target_branch: mr.target_branch,
   author: mr.author?.username,
   sha: mr.sha,
-  reviewers: mr.reviewers.map(r => r.name || r.username),
+  reviewers: mr.reviewers.map(r => r.username),
   labels: mr.labels
 };
 ```
 
-### 3. Label In-Progress
+### 3. In Progress
 
 리뷰 시작 표시:
 
@@ -164,7 +216,7 @@ PUT /api/v4/projects/{project}/merge_requests/{iid}
 ```json
 {
   "add_labels": "ai-review::in-progress",
-  "remove_labels": "ai-review::done,ai-review::failed,ai-review::sha:*"
+  "remove_labels": "<기존 ai-review:: 라벨들>"
 }
 ```
 
@@ -187,17 +239,29 @@ for (const d of discussions) {
   const notes = d.notes || [];
 
   // AI 노트 판별: 첫줄에 'AI Code Review' 포함
-  const isAINote = (n) => (n.body || '').split('\n')[0].includes(AI_MARKER);
-  const isUserNote = (n) => !n.system && !isAINote(n);
-
-  const hasAI = notes.some(isAINote);
-  const hasUserReply = notes.some(isUserNote);
+  const isAI = n => (n.body || '').split('\n')[0].includes(AI_MARKER);
+  const isUser = n => !n.system && !isAI(n);
 
   // AI만 있는 discussion 제외, AI+사용자 답글은 전체 포함 (맥락 보존)
-  if (hasAI && !hasUserReply) continue;
+  if (notes.some(isAI) && !notes.some(isUser)) continue;
 
   // 스레드 데이터 수집 (inline position 포함)
-  // ...
+  const thread = { notes: [], position: null };
+  for (const note of notes) {
+    if (note.system) continue;
+    thread.notes.push({
+      author: note.author?.username,
+      body: (note.body || '').slice(0, 500),
+      isAI: isAI(note)
+    });
+    if (note.type === 'DiffNote' && note.position && !thread.position) {
+      thread.position = {
+        file: note.position.new_path || note.position.old_path,
+        line: note.position.new_line || note.position.old_line
+      };
+    }
+  }
+  if (thread.notes.length > 0) threads.push(thread);
 }
 ```
 
@@ -222,7 +286,7 @@ Review MR !123: Add payment retry logic
 - @bob: "테스트 케이스 추가 부탁드립니다"
 ```
 
-### 7. Execute MR Reviewer
+### 7. Execute
 
 Claude Code 실행:
 
@@ -239,59 +303,82 @@ POST {N8N_API_URL}/v1/projects/system/chat
   "metadata": {
     "mr_iid": 123,
     "mr_url": "https://gitlab.example.com/.../merge_requests/123",
-    "author": "john.doe"
+    "author": "john.doe",
+    "source_branch": "feature/payment",
+    "target_branch": "main",
+    "workflow_execution_id": "<n8n execution id>"
   }
 }
 ```
 
-> **Note**: `requester`는 워크플로우 식별자(`gitlab-mr-workflow`)이며, 실제 MR 작성자는 `metadata.author`에 저장됩니다.
+**Timeout**: 660초 (11분)
 
 ### 8. Parse Review
 
-JSON 응답 파싱:
+Structured Output 파싱:
 
 ```javascript
-const result = JSON.parse(executeResult.result);
+const mr = $('Build Prompt').item.json;
+const result = $('Execute').item.json;
+const output = result.structured_output || {};
 
-// 예상 포맷
-{
-  "verdict": "approve",           // approve | changes | comment
-  "emoji": ":white_check_mark:",  // Slack emoji
-  "summary": "Clean implementation with good test coverage",
-  "points": [
-    "Well-structured error handling",
-    "Good use of retry pattern"
-  ]
-}
+const review = {
+  verdict: output.verdict || 'comment',
+  gitlab_comment: output.gitlab_comment || '## 🔍 AI Code Review\n\nReview completed.',
+  slack_message: output.slack_message || `*<${mr.mr_url}|!${mr.mr_iid}>* ${mr.mr_title}\n💬 리뷰 완료`
+};
+
+return { json: { mr, review, reviewers: mr.reviewers || [] } };
 ```
 
-### 9. Build Message
+### 9. Post GitLab Comment
 
-Slack 메시지 구성:
-
-```javascript
-const message = `:mag: *<${mr.mr_url}|!${mr.mr_iid}>* ${mr.mr_title}
-${review.emoji} ${review.summary}
-${review.points.map(p => `• ${p}`).join('\n')}
-${reviewerMentions}`;
-```
-
-### 10. Post Slack
-
-리뷰 결과 알림:
+GitLab MR에 코멘트 작성:
 
 ```
-POST https://slack.com/api/chat.postMessage
+POST /api/v4/projects/{project}/merge_requests/{iid}/notes
 ```
 
 ```json
 {
-  "channel": "{MR_REVIEW_CHANNEL}",
-  "text": ":mag: *<!123>* Add payment retry logic\n:white_check_mark: Clean implementation..."
+  "body": "<review.gitlab_comment>"
 }
 ```
 
-### 11. Label Done
+### 10. Build Message
+
+Slack 메시지 구성 (리뷰어 멘션 추가):
+
+```javascript
+const mentions = [];
+for (const username of reviewers) {
+  // GitLab 사용자명 → Slack 사용자 ID 조회
+  const res = await this.helpers.httpRequest({
+    method: 'GET',
+    url: `${dashboardUrl}/api/plugins/slack/users`,
+    qs: { q: username, limit: 1 }
+  });
+  if (res.users?.[0]) mentions.push(`<@${res.users[0].id}>`);
+}
+
+const message = review.slack_message + (mentions.length > 0 ? '\n' + mentions.join(' ') : '');
+```
+
+### 11. Post Slack (Native Slack Node)
+
+리뷰 결과 알림:
+
+```json
+{
+  "select": "channel",
+  "channelId": "__MR_REVIEW_CHANNEL__",
+  "text": "{{ $json.message }}"
+}
+```
+
+**사용 노드**: `n8n-nodes-base.slack v2.2`
+
+### 12. Done
 
 완료 상태 표시:
 
@@ -302,51 +389,30 @@ POST https://slack.com/api/chat.postMessage
 }
 ```
 
+### 13. Stats OK / Stats Err
+
+워크플로우 통계 기록:
+
+```
+POST {N8N_API_URL}/v1/workflows/stats
+```
+
+```json
+{
+  "workflow": "gitlab-mr-review",
+  "execution_id": "<claudio execution id>",
+  "status": "success",
+  "duration_ms": 45000,
+  "metadata": {
+    "mr_iid": 123,
+    "mr_title": "Add payment retry logic"
+  }
+}
+```
+
 ---
 
 ## MR Reviewer Agent
-
-### Instruction
-
-```markdown
-# MR Reviewer
-
-## Task
-1. MUST execute slash command: /mr --review {mr_iid}
-   - This is a slash command (type "/mr" to invoke)
-   - Posts review comments directly to GitLab MR
-   - Analyze code and write line-by-line comments
-2. After command execution, return JSON result
-
-## GitLab Comment Format
-When posting comments to GitLab MR, ALWAYS start with:
-## 🔍 AI Code Review
-
-This marker is required for comment tracking.
-
-## Review Focus
-- Bugs, security, performance, maintainability
-- Consistency with codebase (naming, patterns, structure)
-- Code duplication (check similar existing implementations)
-- Error handling patterns
-
-## CRITICAL OUTPUT RULES
-- Execute /mr --review command FIRST, then return JSON
-- Your ENTIRE response must be a single JSON object
-- NO text before JSON (no "Here is", "Let me", "Now", etc.)
-- NO text after JSON
-- NO markdown code blocks
-- Start with { and end with }
-
-## JSON Format
-{"verdict":"approve|changes|comment","emoji":":white_check_mark:|:warning:|:x:","summary":"한줄요약","points":["point1","point2"]}
-
-## JSON Rules
-- summary: Korean, one sentence
-- points: Korean text only, NO emojis
-- verdict: approve (mergeable) | changes (fix required) | comment (discuss)
-- points: 1-2 key findings
-```
 
 ### AI 마커 정책
 
@@ -386,15 +452,38 @@ const isAI = firstLine.includes('AI Code Review');
 
 ---
 
+## 실패 처리
+
+### Failed 라벨 설정
+
+```json
+{
+  "add_labels": "ai-review::failed",
+  "remove_labels": "ai-review::in-progress"
+}
+```
+
+### Notify Failure (Native Slack Node)
+
+```javascript
+text: $('Success?').item.json.status === 'timeout'
+  ? `:x: *MR Review Failed*\n<${mr_url}|!${mr_iid}> ${mr_title}\n:hourglass: Timeout`
+  : `:x: *MR Review Failed*\n<${mr_url}|!${mr_iid}> ${mr_title}\n:warning: ${error.message}`
+```
+
+---
+
 ## 설정
 
 ### Placeholder
 
-| Placeholder | 설명 | 예시 |
-|-------------|------|------|
-| `__GITLAB_HOST__` | GitLab 호스트 | `gitlab.example.com` |
-| `__GITLAB_PROJECT__` | 프로젝트 경로 | `team/backend-api` |
-| `__GITLAB_CREDENTIAL_ID__` | GitLab 인증 ID | |
+| Placeholder | 설명 |
+|-------------|------|
+| `__GITLAB_HOST__` | GitLab 호스트 |
+| `__GITLAB_PROJECT__` | 프로젝트 경로 (URL 인코딩) |
+| `__MR_REVIEW_CHANNEL__` | Slack 알림 채널 ID |
+| `__GITLAB_CREDENTIAL_ID__` | GitLab API 인증 ID |
+| `__SLACK_CREDENTIAL_ID__` | Slack API 인증 ID |
 
 ### n8n 환경변수
 
@@ -404,6 +493,13 @@ const isAI = firstLine.includes('AI Code Review');
 | `N8N_DASHBOARD_URL` | Dashboard URL |
 | `MR_REVIEW_CHANNEL` | Slack 알림 채널 |
 
+### Credentials
+
+| Credential | 용도 |
+|------------|------|
+| `httpHeaderAuth` | GitLab API 인증 |
+| `slackApi` | Slack API 인증 |
+
 ---
 
 ## Slack 메시지 예시
@@ -411,22 +507,16 @@ const isAI = firstLine.includes('AI Code Review');
 ### 승인
 
 ```
-:mag: *<!123>* Add payment retry logic
-:white_check_mark: Clean implementation with good test coverage
-• Well-structured error handling
-• Good use of retry pattern with exponential backoff
-• Comprehensive test cases for edge scenarios
+*<!123>* Add payment retry logic
+✅ Clean implementation with good test coverage
 @john.doe @jane.smith
 ```
 
 ### 수정 필요
 
 ```
-:mag: *<!456>* Refactor user authentication
-:warning: Several issues need addressing before merge
-• 🔴 SQL injection vulnerability in login query
-• 🟡 Missing input validation for email field
-• 💬 Consider using prepared statements pattern
+*<!456>* Refactor user authentication
+⚠️ Several issues need addressing before merge
 @bob.wilson
 ```
 
@@ -436,46 +526,6 @@ const isAI = firstLine.includes('AI Code Review');
 :x: *MR Review Failed*
 <!789> Update dependencies
 :hourglass: Timeout
-```
-
----
-
-## 에러 처리
-
-### 타임아웃
-
-```javascript
-if (status === 'timeout') {
-  // 라벨: ai-review::failed
-  // Slack: 타임아웃 알림
-  // 다음 주기에 재시도
-}
-```
-
-### JSON 파싱 실패
-
-```javascript
-try {
-  review = JSON.parse(result);
-} catch (e) {
-  review = {
-    verdict: 'error',
-    emoji: ':warning:',
-    summary: 'Failed to parse review result',
-    points: []
-  };
-}
-```
-
-### GitLab API 오류
-
-```javascript
-if (gitlabResponse.status === 401) {
-  // 인증 만료 → 알림
-}
-if (gitlabResponse.status === 404) {
-  // MR 삭제됨 → 스킵
-}
 ```
 
 ---

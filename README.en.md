@@ -117,6 +117,7 @@ docker compose up -d                    # n8n
 |----------|---------|----------|---------|
 | **user-context-handler** | Webhook | User rules/context management | [→](docs/workflows/user-context-handler.md) |
 | **gitlab-mr-review** | Schedule (1min) | Auto MR code review | [→](docs/workflows/gitlab-mr-review.md) |
+| **auto-fix-scheduler** | Schedule (1min) | JIRA ai:auto-fix label → Auto fix | [→](docs/workflows/auto-fix-scheduler.md) |
 
 ### Core Features
 
@@ -180,6 +181,7 @@ glab mr diff 123
 | [Slack Feedback Handler](docs/workflows/slack-feedback-handler.md) | Feedback collection workflow |
 | [User Context Handler](docs/workflows/user-context-handler.md) | User context management |
 | [GitLab MR Review](docs/workflows/gitlab-mr-review.md) | Auto MR review |
+| [Auto Fix Scheduler](docs/workflows/auto-fix-scheduler.md) | JIRA auto fix |
 
 ---
 

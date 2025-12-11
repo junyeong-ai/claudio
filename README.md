@@ -117,6 +117,7 @@ docker compose up -d                    # n8n
 |------------|--------|------|------|
 | **user-context-handler** | Webhook | 사용자 규칙/컨텍스트 관리 | [→](docs/workflows/user-context-handler.md) |
 | **gitlab-mr-review** | 스케줄 (1분) | MR 자동 코드 리뷰 | [→](docs/workflows/gitlab-mr-review.md) |
+| **auto-fix-scheduler** | 스케줄 (1분) | JIRA ai:auto-fix 라벨 → 자동 수정 | [→](docs/workflows/auto-fix-scheduler.md) |
 
 ### 핵심 기능
 
@@ -180,6 +181,7 @@ glab mr diff 123
 | [Slack Feedback Handler](docs/workflows/slack-feedback-handler.md) | 피드백 수집 워크플로우 |
 | [User Context Handler](docs/workflows/user-context-handler.md) | 사용자 컨텍스트 관리 |
 | [GitLab MR Review](docs/workflows/gitlab-mr-review.md) | MR 자동 리뷰 |
+| [Auto Fix Scheduler](docs/workflows/auto-fix-scheduler.md) | JIRA 자동 수정 |
 
 ---
 

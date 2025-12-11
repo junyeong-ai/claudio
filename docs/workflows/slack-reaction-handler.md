@@ -1,6 +1,6 @@
 # slack-reaction-handler
 
-Slack 리액션을 감지하여 후속 작업을 트리거하는 워크플로우.
+Slack 리액션을 감지하여 JIRA 티켓 생성 및 자동 수정을 트리거하는 워크플로우.
 
 ---
 
@@ -10,18 +10,16 @@ Slack 리액션을 감지하여 후속 작업을 트리거하는 워크플로우
 |------|-----|
 | **트리거** | Webhook (`/webhook/slack-reaction`) |
 | **소스 이벤트** | Slack `reaction_added` |
-| **주요 기능** | Jira 티켓 생성, 수정 실행, 옵션 선택 |
+| **주요 기능** | JIRA 티켓 생성, 자동 수정 라벨 추가, 3-way 라우팅 |
 
 ---
 
 ## 리액션 유형
 
-| 리액션 | 유형 | 동작 |
-|--------|------|------|
-| :jira: | Action | Jira 티켓 생성 |
-| :wrench: | Action | AI 제안 수정 실행 |
-| :one: ~ :nine: | Trigger | 옵션 선택 후 후속 작업 |
-| :thumbsup: :thumbsdown: | Feedback | → [slack-feedback-handler](slack-feedback-handler.md)로 라우팅 |
+| 리액션 | 동작 |
+|--------|------|
+| `:one:` | JIRA 티켓만 생성 |
+| `:two:` | JIRA 티켓 생성 + `ai:auto-fix` 라벨 추가 (can_auto_fix=true인 경우) |
 
 ---
 
@@ -32,225 +30,373 @@ Slack 리액션을 감지하여 후속 작업을 트리거하는 워크플로우
 │                        slack-reaction-handler                        │
 └─────────────────────────────────────────────────────────────────────┘
 
-  Webhook          Lookup Execution       Route by Type
-    │                    │                     │
-    ▼                    ▼                     ▼
-┌───────┐           ┌─────────┐           ┌─────────┐
-│Webhook│──────────►│ Lookup  │──────────►│  Route  │
-│       │           │Execution│           │         │
-└───────┘           └─────────┘           └────┬────┘
-                                               │
-                    ┌──────────────────────────┼──────────────────────┐
-                    ▼                          ▼                      ▼
-              ┌───────────┐             ┌───────────┐          ┌───────────┐
-              │   :jira:  │             │ :wrench:  │          │  :one:    │
-              │Create Jira│             │Execute Fix│          │Select Opt │
-              └─────┬─────┘             └─────┬─────┘          └─────┬─────┘
-                    │                         │                      │
-                    ▼                         ▼                      ▼
-              ┌───────────┐             ┌───────────┐          ┌───────────┐
-              │Reply Jira │             │ Reply Fix │          │ Execute   │
-              │   Link    │             │  Result   │          │ Selected  │
-              └───────────┘             └───────────┘          └───────────┘
+  Webhook              OK              Parse
+    │                   │                │
+    ▼                   ▼                ▼
+┌───────┐          ┌─────────┐      ┌─────────┐
+│Webhook│─────────►│   OK    │─────►│  Parse  │
+│       │          │         │      │         │
+└───────┘          └─────────┘      └────┬────┘
+                                         │
+                                         ▼
+                                    ┌─────────┐
+                                    │ Valid?  │
+                                    └────┬────┘
+                                         │
+                        ┌────────────────┴────────────────┐
+                        ▼                                 ▼
+                   (Valid)                           (Invalid)
+                        │                                 │
+                        ▼                               [Stop]
+                   ┌─────────┐
+                   │:loading:│◄── Native Slack Node
+                   └────┬────┘
+                        │
+                        ▼
+                   ┌─────────┐
+                   │  Fetch  │◄── 실행 컨텍스트 조회
+                   │ Context │
+                   └────┬────┘
+                        │
+                        ▼
+                   ┌─────────┐
+                   │ Extract │◄── can_auto_fix 확인
+                   └────┬────┘
+                        │
+                        ▼
+                   ┌─────────┐
+                   │Has JIRA?│
+                   └────┬────┘
+                        │
+            ┌───────────┴───────────┐
+            ▼                       ▼
+       (Existing)              (New JIRA)
+            │                       │
+            ▼                       ▼
+       ┌─────────┐            ┌─────────┐
+       │  Use    │            │ Create  │◄── Native JIRA Node
+       │Existing │            │  JIRA   │
+       └────┬────┘            └────┬────┘
+            │                      │
+            └──────────┬───────────┘
+                       ▼
+                  ┌─────────┐
+                  │JIRA OK? │
+                  └────┬────┘
+                       │
+           ┌───────────┴───────────┐
+           ▼                       ▼
+      (Success)               (Failure)
+           │                       │
+           ▼                       ▼
+      ┌─────────┐            ┌─────────┐
+      │  Save   │            │  Error  │
+      │JIRA Key │            │  Data   │
+      └────┬────┘            └────┬────┘
+           │                      │
+           ▼                      ▼
+      ┌─────────┐            ┌─────────┐
+      │  Route  │            │  Reply  │
+      │ (3-way) │            │  Error  │
+      └────┬────┘            └────┬────┘
+           │                      │
+           │                      ▼
+           │                 ┌─────────┐
+           │                 │Remove   │
+           │                 │Loading  │
+           │                 └────┬────┘
+           │                      │
+           │                      ▼
+           │                 ┌─────────┐
+           │                 │   ❌    │
+           │                 └─────────┘
+           │
+    ┌──────┴──────┬────────────────┐
+    ▼             ▼                ▼
+┌───────┐   ┌───────────┐   ┌───────────┐
+│ JIRA  │   │   JIRA    │   │  AutoFix  │
+│ Only  │   │ + AutoFix │   │Not Allowed│
+└───┬───┘   └─────┬─────┘   └─────┬─────┘
+    │             │               │
+    ▼             ▼               ▼
+┌───────┐   ┌───────────┐   ┌───────────┐
+│ Reply │   │Add Label  │   │Reply No   │
+│ JIRA  │   │ai:auto-fix│   │ AutoFix   │
+│ Only  │   └─────┬─────┘   └─────┬─────┘
+└───┬───┘         │               │
+    │             ▼               ▼
+    │       ┌───────────┐   ┌───────────┐
+    │       │  Reply    │   │   Done    │
+    │       │ AutoFix   │   │No AutoFix │
+    │       └─────┬─────┘   └───────────┘
+    │             │
+    │             ▼
+    │       ┌───────────┐
+    │       │   Done    │
+    │       │  AutoFix  │
+    │       └───────────┘
+    │
+    ▼
+┌───────┐
+│ Done  │
+│JIRA   │
+│ Only  │
+└───────┘
+```
+
+---
+
+## 3-Way 라우팅
+
+Switch 노드에서 3가지 경로로 분기:
+
+| 조건 | 라우팅 | 동작 |
+|------|--------|------|
+| `action = jira_only` | JIRA Only | JIRA 생성만 |
+| `action = jira_autofix` AND `can_auto_fix = true` | JIRA + AutoFix | JIRA 생성 + `ai:auto-fix` 라벨 |
+| `action = jira_autofix` AND `can_auto_fix = false` | AutoFix Not Allowed | JIRA 생성 + 자동수정 불가 안내 |
+
+### Switch 노드 설정
+
+```javascript
+// Route 1: JIRA Only
+{
+  "leftValue": "={{ $('Extract').item.json.action }}",
+  "operator": "equals",
+  "rightValue": "jira_only"
+}
+
+// Route 2: JIRA + AutoFix
+{
+  "combinator": "and",
+  "conditions": [
+    { "leftValue": "={{ $('Extract').item.json.action }}", "operator": "equals", "rightValue": "jira_autofix" },
+    { "leftValue": "={{ $('Extract').item.json.can_auto_fix }}", "operator": "equals", "rightValue": true }
+  ]
+}
+
+// Route 3: AutoFix Not Allowed
+{
+  "combinator": "and",
+  "conditions": [
+    { "leftValue": "={{ $('Extract').item.json.action }}", "operator": "equals", "rightValue": "jira_autofix" },
+    { "leftValue": "={{ $('Extract').item.json.can_auto_fix }}", "operator": "equals", "rightValue": false }
+  ]
+}
 ```
 
 ---
 
 ## 노드 상세
 
-### 1. Webhook
+### 1. Parse
 
-**입력**:
-```json
-{
-  "reaction": "jira",
-  "user": "U0123456789",
-  "item": {
-    "channel": "C0123456789",
-    "ts": "1234567890.123456"
-  }
-}
-```
-
-### 2. Lookup Execution
-
-메시지 ts로 원본 실행 조회:
-
-```
-GET {N8N_API_URL}/v1/executions/lookup?channel={channel}&ts={ts}
-```
-
-**응답**:
-```json
-{
-  "id": "exec_abc123",
-  "user_message": "장애 분석해줘",
-  "response": "분석 결과...",
-  "agent": "Incident Analyzer",
-  "metadata": {
-    "service": "payment-service",
-    "options": [
-      {"id": 1, "action": "rollback", "label": "롤백"},
-      {"id": 2, "action": "scale", "label": "스케일 아웃"}
-    ]
-  }
-}
-```
-
-### 3. Route by Type
-
-리액션 유형별 분기:
+리액션 이벤트 파싱:
 
 ```javascript
-const reaction = $json.reaction;
+const e = $('Webhook').item.json.body;
 
-// 피드백 리액션은 별도 워크플로우로
-if (['thumbsup', '+1', 'thumbsdown', '-1'].includes(reaction)) {
-  return { route: 'feedback' };
-}
+// reaction_added 이벤트만 처리
+if (e.type !== 'reaction_added') return { json: { skip: true } };
 
-// 숫자 리액션
-if (/^(one|two|three|four|five|six|seven|eight|nine)$/.test(reaction)) {
-  const num = { one: 1, two: 2, ... }[reaction];
-  return { route: 'trigger', option: num };
-}
+// :one:, :two: 리액션만 처리
+const r = e.reaction;
+if (!['one', 'two'].includes(r)) return { json: { skip: true } };
 
-// 액션 리액션
-return { route: 'action', action: reaction };
-```
+const channel = e.item?.channel || e.channel;
+const message_ts = e.item?.ts || e.message_ts;
 
----
-
-## 액션: Jira 티켓 생성
-
-### 플로우
-
-```
-:jira: 리액션
-      │
-      ▼
-  실행 정보 조회
-      │
-      ▼
-  Jira 티켓 생성
-      │
-      ▼
-  Slack에 링크 응답
-```
-
-### Jira API 호출
-
-```
-POST https://{JIRA_HOST}/rest/api/3/issue
-```
-
-```json
-{
-  "fields": {
-    "project": { "key": "OPS" },
-    "issuetype": { "name": "Bug" },
-    "summary": "[AI 분석] payment-service High Error Rate",
-    "description": {
-      "type": "doc",
-      "content": [
-        {
-          "type": "paragraph",
-          "content": [{ "type": "text", "text": "AI 분석 결과..." }]
-        }
-      ]
-    },
-    "labels": ["ai-generated", "incident"]
-  }
-}
-```
-
-### 응답 메시지
-
-```
-:jira: Jira 티켓이 생성되었습니다: OPS-1234
-https://company.atlassian.net/browse/OPS-1234
-```
-
----
-
-## 액션: Fix 실행
-
-### 플로우
-
-```
-:wrench: 리액션
-      │
-      ▼
-  실행 정보에서 fix_command 추출
-      │
-      ▼
-  Claude Code로 명령 실행
-      │
-      ▼
-  결과 응답
-```
-
-### 안전 장치
-
-```javascript
-// 위험한 명령 필터링
-const dangerousPatterns = [
-  /rm\s+-rf/,
-  /DROP\s+TABLE/i,
-  /kubectl\s+delete/
-];
-
-if (dangerousPatterns.some(p => p.test(command))) {
-  return { error: '위험한 명령은 실행할 수 없습니다.' };
-}
-```
-
-### 응답 메시지
-
-```
-:wrench: 수정이 완료되었습니다.
-
-*실행 명령*:
-`kubectl rollout restart deployment/payment-service`
-
-*결과*:
-deployment.apps/payment-service restarted
-```
-
----
-
-## 트리거: 옵션 선택
-
-### 플로우
-
-```
-:one: 리액션
-      │
-      ▼
-  metadata.options에서 option[0] 조회
-      │
-      ▼
-  선택된 액션 실행
-      │
-      ▼
-  결과 응답
-```
-
-### 옵션 매핑
-
-```javascript
-const options = execution.metadata.options;
-const selected = options.find(o => o.id === optionNumber);
-
-if (!selected) {
-  return { error: `옵션 ${optionNumber}이 없습니다.` };
-}
-
-// 선택된 옵션의 액션 실행
 return {
-  action: selected.action,
-  params: selected.params
+  json: {
+    skip: false,
+    action: r === 'one' ? 'jira_only' : 'jira_autofix',
+    channel,
+    message_ts,
+    user: e.user
+  }
 };
+```
+
+### 2. Loading (Native Slack Node)
+
+처리 시작 표시:
+
+```json
+{
+  "resource": "reaction",
+  "operation": "add",
+  "channelId": "{{ $json.channel }}",
+  "timestamp": "{{ $json.message_ts }}",
+  "name": "loading"
+}
+```
+
+**사용 노드**: `n8n-nodes-base.slack v2.2`
+
+### 3. Fetch Context
+
+실행 컨텍스트 조회:
+
+```
+GET {N8N_API_URL}/v1/executions/lookup?source=slack&ref_key=options_ts&ref_value={message_ts}
+```
+
+### 4. Extract
+
+컨텍스트에서 정보 추출:
+
+```javascript
+const parse = $('Parse').item.json;
+const res = $input.first().json;
+const ctx = res.execution || {};
+
+let jira_key = null, jira_title = '', jira_description = null;
+let priority = 'Medium', alert = {}, can_auto_fix = false;
+
+if (ctx.id && ctx.metadata) {
+  const meta = typeof ctx.metadata === 'string' ? JSON.parse(ctx.metadata) : ctx.metadata;
+
+  // 기존 JIRA 키 확인
+  if (meta.jira_key) jira_key = meta.jira_key;
+
+  // 컨텍스트에서 분석 결과 추출
+  const context = meta.context ? JSON.parse(meta.context) : {};
+  if (context.alert) alert = context.alert;
+  if (context.can_auto_fix === true) can_auto_fix = true;
+
+  if (context.analysis) {
+    jira_title = context.analysis.jira_title || '';
+    jira_description = context.analysis.jira_description || null;
+    priority = context.analysis.priority || 'Medium';
+    if (context.analysis.can_auto_fix === true) can_auto_fix = true;
+  }
+}
+
+// 기본 JIRA 제목 생성
+if (!jira_title) {
+  jira_title = `[BUG] ${alert.service || 'Unknown'} - ${alert.alert_name || 'Incident'}`;
+}
+
+return {
+  json: {
+    ...parse,
+    execution_id: ctx.id || null,
+    jira_key,
+    jira_title,
+    jira_description,
+    priority,
+    alert,
+    can_auto_fix
+  }
+};
+```
+
+### 5. Has JIRA?
+
+기존 JIRA 키 존재 여부 확인:
+
+- **있으면**: Use Existing JIRA (기존 키 사용)
+- **없으면**: Create JIRA (새로 생성)
+
+### 6. Create JIRA (Native JIRA Node)
+
+JIRA 티켓 생성:
+
+```json
+{
+  "operation": "create",
+  "project": "__JIRA_PROJECT__",
+  "issueType": "Task",
+  "summary": "{{ $json.jira_title }}",
+  "additionalFields": {
+    "description": "{{ $json.jira_description }}",
+    "priority": "{{ $json.priority === 'High' ? 'P1 - High' : 'P2 - Medium' }}"
+  }
+}
+```
+
+**사용 노드**: `n8n-nodes-base.jira v1`
+
+### 7. Save JIRA Key
+
+실행 정보에 JIRA 키 저장:
+
+```javascript
+if (data.execution_id && data.jira_key) {
+  await this.helpers.httpRequest({
+    method: 'PATCH',
+    url: `${process.env.N8N_API_URL}/v1/executions/${data.execution_id}`,
+    body: { jira_key: data.jira_key },
+    json: true,
+    timeout: 5000
+  });
+}
+```
+
+### 8. Route (3-Way Switch)
+
+3가지 경로로 분기:
+
+#### 8a. JIRA Only
+
+```javascript
+// Reply JIRA Only (Native Slack Node)
+text: `:jira-new: <${jira_url}|${jira_key}> ${jira_title}`
+
+// Done JIRA Only (Native Slack Node)
+{ "resource": "reaction", "operation": "remove", "name": "loading" }
+```
+
+#### 8b. JIRA + AutoFix
+
+```javascript
+// Add auto-fix Label (Native JIRA Node)
+{
+  "operation": "update",
+  "issueKey": "{{ $json.jira_key }}",
+  "updateFields": {
+    "labels": ["ai:auto-fix"]
+  }
+}
+
+// Reply AutoFix (Native Slack Node)
+text: `:jira-new: <${jira_url}|${jira_key}> ${jira_title}\n:robot_face: \`ai:auto-fix\` 라벨 추가됨 - 자동 수정 대기 중`
+
+// Done AutoFix (Native Slack Node)
+{ "resource": "reaction", "operation": "remove", "name": "loading" }
+```
+
+#### 8c. AutoFix Not Allowed
+
+```javascript
+// Reply No AutoFix (Native Slack Node)
+text: `:jira-new: <${jira_url}|${jira_key}> ${jira_title}\n:no_entry: 이 이슈는 자동 수정이 불가능합니다`
+
+// Done No AutoFix (Native Slack Node)
+{ "resource": "reaction", "operation": "remove", "name": "loading" }
+```
+
+---
+
+## 에러 처리
+
+### JIRA 생성 실패
+
+```javascript
+// Error Data
+const d = $('JIRA OK?').item.json;
+return {
+  json: {
+    channel: $('Extract').item.json.channel,
+    message_ts: $('Extract').item.json.message_ts,
+    error: d.error || 'JIRA creation failed'
+  }
+};
+
+// Reply Error (Native Slack Node)
+text: `:x: JIRA creation failed: ${$json.error}`
+
+// Remove Loading Err + Add ❌ (Native Slack Node)
 ```
 
 ---
@@ -261,8 +407,9 @@ return {
 
 | Placeholder | 설명 |
 |-------------|------|
-| `__JIRA_HOST__` | Jira 호스트 |
-| `__JIRA_CREDENTIAL_ID__` | Jira 인증 ID |
+| `__JIRA_PROJECT__` | JIRA 프로젝트 키 |
+| `__JIRA_CREDENTIAL_ID__` | JIRA API 인증 ID |
+| `__SLACK_CREDENTIAL_ID__` | Slack API 인증 ID |
 
 ### n8n 환경변수
 
@@ -270,37 +417,47 @@ return {
 |------|------|
 | `N8N_API_URL` | claudio-api URL |
 
+### Credentials
+
+| Credential | 용도 |
+|------------|------|
+| `jiraSoftwareCloudApi` | JIRA API 인증 |
+| `slackApi` | Slack API 인증 |
+
 ---
 
-## 에러 처리
+## Slack 메시지 예시
 
-### 실행 정보 없음
-
-```
-해당 메시지에 대한 실행 정보를 찾을 수 없습니다.
-(피드백은 AI 응답 메시지에만 가능합니다)
-```
-
-### Jira 생성 실패
+### JIRA Only
 
 ```
-:warning: Jira 티켓 생성에 실패했습니다.
-오류: Authentication failed
+:jira-new: <https://{JIRA_HOST}/browse/PRJ-123|PRJ-123> [BUG] service-name - High Error Rate
 ```
 
-### 중복 트리거 방지
+### JIRA + AutoFix
 
-```javascript
-// 이미 처리된 트리거인지 확인
-const existing = await lookupReaction(execution_id, reaction);
-if (existing?.triggered) {
-  return { skip: true, reason: 'already_triggered' };
-}
+```
+:jira-new: <https://{JIRA_HOST}/browse/PRJ-123|PRJ-123> [BUG] service-name - High Error Rate
+:robot_face: `ai:auto-fix` 라벨 추가됨 - 자동 수정 대기 중
+```
+
+### AutoFix Not Allowed
+
+```
+:jira-new: <https://{JIRA_HOST}/browse/PRJ-123|PRJ-123> [BUG] service-name - High Error Rate
+:no_entry: 이 이슈는 자동 수정이 불가능합니다
+```
+
+### 에러
+
+```
+:x: JIRA creation failed: Authentication failed
 ```
 
 ---
 
 ## 연관 워크플로우
 
+- [slack-message-handler](slack-message-handler.md) — 장애 분석 및 `can_auto_fix` 판단
+- [auto-fix-scheduler](auto-fix-scheduler.md) — `ai:auto-fix` 라벨 티켓 자동 수정
 - [slack-feedback-handler](slack-feedback-handler.md) — 피드백 리액션 처리
-- [slack-message-handler](slack-message-handler.md) — 원본 장애 분석

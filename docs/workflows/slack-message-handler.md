@@ -10,7 +10,7 @@
 |------|-----|
 | **트리거** | Webhook (`/webhook/slack-message`) |
 | **소스 이벤트** | Slack `message.channels` |
-| **주요 기능** | 장애 알림 감지, 자동 분석, 권장 조치 제안 |
+| **주요 기능** | 장애 알림 감지, 자동 분석, JIRA 생성 옵션 |
 
 ---
 
@@ -21,150 +21,331 @@
 │                         slack-message-handler                        │
 └─────────────────────────────────────────────────────────────────────┘
 
-  Webhook            Filter Channel         Parse Alert
-    │                      │                     │
-    ▼                      ▼                     ▼
-┌───────┐             ┌─────────┐           ┌─────────┐
-│Webhook│────────────►│ Filter  │──(pass)──►│ Parse   │
-│       │             │ Channel │           │ Alert   │
-└───────┘             └────┬────┘           └────┬────┘
-                           │                     │
-                      (not match)                ▼
-                           │              ┌───────────┐
-                           ▼              │ Enrich    │
-                        [Stop]            │ Context   │
-                                          └─────┬─────┘
-                                                │
-    ┌───────────────────────────────────────────┘
-    ▼
-┌───────────┐         ┌───────────┐         ┌───────────┐
-│ Classify  │────────►│   Chat    │────────►│   Reply   │
-│           │         │           │         │           │
-└───────────┘         └───────────┘         └───────────┘
+  Webhook              OK              Parse
+    │                   │                │
+    ▼                   ▼                ▼
+┌───────┐          ┌─────────┐      ┌─────────┐
+│Webhook│─────────►│   OK    │─────►│  Parse  │
+│       │          │         │      │         │
+└───────┘          └─────────┘      └────┬────┘
+                                         │
+                                         ▼
+                                    ┌─────────┐
+                                    │Incident?│
+                                    └────┬────┘
+                                         │
+                        ┌────────────────┴────────────────┐
+                        ▼                                 ▼
+                   (Incident)                        (Not Incident)
+                        │                                 │
+                        ▼                               [Stop]
+                   ┌─────────┐
+                   │:loading:│◄── Native Slack Node
+                   └────┬────┘
+                        │
+                        ▼
+                   ┌─────────┐
+                   │ Analyze │◄── Incident Analyzer Agent
+                   └────┬────┘
+                        │
+            ┌───────────┴───────────┐
+            ▼                       ▼
+       (Success)               (Failure)
+            │                       │
+            ▼                       ▼
+       ┌─────────┐            ┌─────────┐
+       │ Extract │            │Remove   │
+       └────┬────┘            │Loading  │
+            │                 └────┬────┘
+            ▼                      │
+       ┌─────────┐                 ▼
+       │  Post   │            ┌─────────┐
+       │ Report  │            │   ❌    │
+       └────┬────┘            └────┬────┘
+            │                      │
+            ▼                      ▼
+       ┌─────────┐            ┌─────────┐
+       │  Post   │            │ Err Msg │
+       │ Options │            └────┬────┘
+       └────┬────┘                 │
+            │                      ▼
+            ▼                 ┌─────────┐
+       ┌─────────┐            │Reply Err│
+       │  Set    │            └─────────┘
+       │Context  │
+       └────┬────┘
+            │
+    ┌───────┴───────┐
+    ▼               ▼
+┌───────┐     ┌─────────┐
+│ :one: │     │Can Auto │
+│       │     │  Fix?   │
+└───┬───┘     └────┬────┘
+    │              │
+    │         ┌────┴────┐
+    │         ▼         ▼
+    │    (can_auto_fix) (false)
+    │         │         │
+    │         ▼        [Skip]
+    │    ┌─────────┐
+    │    │ :two:   │
+    │    └────┬────┘
+    │         │
+    └────┬────┘
+         ▼
+    ┌─────────┐
+    │ Remove  │
+    │ Loading │
+    └────┬────┘
+         │
+         ▼
+    ┌─────────┐
+    │   ✅    │
+    └─────────┘
 ```
 
 ---
 
-## 사용 사례
+## can_auto_fix 로직
 
-### 장애 채널 모니터링
+AI가 분석 결과에서 자동 수정 가능 여부를 판단합니다.
 
-PagerDuty, Datadog 등의 알림이 오는 채널을 모니터링:
+### Structured Output
+
+Incident Analyzer 에이전트가 반환하는 `structured_output`:
+
+```json
+{
+  "slack_report": "📊 *장애 분석 결과*\n...",
+  "jira_title": "[BUG] payment-service - High Error Rate",
+  "jira_description": { "type": "doc", "content": [...] },
+  "priority": "High",
+  "can_auto_fix": true
+}
+```
+
+### 옵션 표시 조건
+
+```javascript
+const can_auto_fix = meta.can_auto_fix === true;
+
+// Post Options 노드에서:
+text: can_auto_fix
+  ? `:jira-new: *${jira_title}*\n:one: JIRA 생성 | :two: JIRA + 자동수정`
+  : `:jira-new: *${jira_title}*\n:one: JIRA 생성`
+```
+
+| can_auto_fix | 표시 옵션 |
+|--------------|----------|
+| `true` | `:one: JIRA 생성` + `:two: JIRA + 자동수정` |
+| `false` | `:one: JIRA 생성` 만 표시 |
+
+### 리액션 추가
 
 ```
-#incident-alerts 채널
-    │
-    ▼
-[ALERT] payment-service: High Error Rate (>5%)
-    │
-    ▼
-자동 분석 트리거
-    │
-    ▼
-"payment-service의 에러율이 급증했습니다.
- 최근 배포: v2.3.1 (10분 전)
- 영향 범위: /api/checkout 엔드포인트
- 권장 조치: 롤백 고려"
+Set Context → :one: (항상)
+           → Can AutoFix? → :two: (can_auto_fix=true일 때만)
 ```
 
 ---
 
 ## 노드 상세
 
-### 1. Filter Channel
+### 1. Parse
 
-설정된 인시던트 채널만 처리:
+Datadog 알림 메시지 파싱:
 
 ```javascript
-const incidentChannels = '__INCIDENT_CHANNELS__'.split(',');
-const channel = $json.body.channel;
+const INCIDENT_CHANNELS = '__INCIDENT_CHANNELS__'.split(',').filter(Boolean);
+const e = $('Webhook').item.json.body;
 
-if (!incidentChannels.includes(channel)) {
-  return []; // 처리 중단
+// 채널 필터링
+if (INCIDENT_CHANNELS.length > 0 && !INCIDENT_CHANNELS.includes(e.channel)) {
+  return { json: { skip: true } };
 }
-return $json;
-```
 
-### 2. Parse Alert
+// Datadog 알림 attachment 파싱
+const att = (e.attachments || []).find(a => (a.title || '').startsWith('Triggered:'));
+if (!att) return { json: { skip: true } };
 
-알림 메타데이터 추출:
-
-```javascript
-const text = $json.body.text;
-const servicePrefix = '__SERVICE_PREFIX__';
-
-// [ALERT] myapp.payment-service: High Error Rate
-const match = text.match(/\[(\w+)\]\s*([^:]+):\s*(.+)/);
-if (!match) return { type: 'unknown', raw: text };
-
-return {
-  severity: match[1],                              // ALERT
-  service: match[2].replace(servicePrefix, ''),    // payment-service
-  message: match[3],                               // High Error Rate
-  raw: text
+// 알림 정보 추출
+const alert = {
+  severity: tm?.[1] || 'unknown',    // WARN, ERROR 등
+  project: tm?.[2] || 'unknown',
+  alert_name: tm?.[3] || 'unknown',
+  env: tm?.[5] || 'unknown',
+  service: sm?.[1] || '',
+  trace_id: '...',
+  log_timestamp: '...',
+  log_message: '...',
+  query: '...'
 };
+
+const prompt = `Analyze Incident Alert\n\n## Alert Info\n...`;
+return { json: { skip: false, channel, ts, thread_ts, prompt, alert } };
 ```
 
-### 3. Enrich Context
+### 2. Loading
 
-외부 소스에서 추가 컨텍스트 수집:
-
-```javascript
-// Datadog 메트릭 조회 (예시)
-const service = $json.service;
-const metrics = await fetch(`${DATADOG_API}/metrics?service=${service}`);
-
-// 최근 배포 정보
-const deploys = await fetch(`${DEPLOY_API}/recent?service=${service}`);
-
-return {
-  ...$json,
-  metrics: metrics,
-  recent_deploy: deploys[0],
-  related_logs: `datadog-cli logs "${service}" --since 10m`
-};
-```
-
-### 4. Classify → Chat
-
-Incident Analyzer 에이전트로 라우팅:
+분석 시작 표시 (Native Slack Node):
 
 ```json
 {
-  "text": "[ALERT] payment-service: High Error Rate",
+  "resource": "reaction",
+  "operation": "add",
+  "channelId": "{{ $json.channel }}",
+  "timestamp": "{{ $json.ts }}",
+  "name": "loading"
+}
+```
+
+**사용 노드**: `n8n-nodes-base.slack v2.2`
+
+### 3. Analyze
+
+Incident Analyzer 에이전트 실행:
+
+```
+POST {N8N_API_URL}/v1/projects/system/chat
+```
+
+```json
+{
+  "user_message": "<Parse에서 생성한 prompt>",
   "agent": "Incident Analyzer",
+  "source": "slack",
+  "requester": "slack-incident-workflow",
   "metadata": {
-    "service": "payment-service",
-    "severity": "ALERT",
-    "recent_deploy": "v2.3.1"
+    "channel": "<channel>",
+    "thread_ts": "<thread_ts>",
+    "service": "<service>",
+    "env": "<env>",
+    "triggered_by": "datadog",
+    "workflow_execution_id": "<n8n execution id>"
   }
 }
 ```
 
-### 5. Reply
+**Timeout**: 660초 (11분)
 
-분석 결과를 스레드로 응답:
+### 4. Extract
+
+분석 결과 추출:
+
+```javascript
+const r = $input.first().json;
+const p = $('Parse').item.json;
+const meta = r.structured_output || {};
+const can_auto_fix = meta.can_auto_fix === true;
+
+return {
+  json: {
+    channel: p.channel,
+    ts: p.ts,
+    thread_ts: p.thread_ts,
+    execution_id: r.id,
+    alert: p.alert,
+    slack_report: meta.slack_report || ':warning: Analysis completed but no report generated',
+    jira_title: meta.jira_title || `[BUG] ${p.alert.service} - ${p.alert.alert_name}`,
+    can_auto_fix,
+    context: JSON.stringify({ alert: p.alert, analysis: meta, can_auto_fix })
+  }
+};
+```
+
+### 5. Post Report (Native Slack Node)
+
+분석 결과 스레드 응답:
+
+```json
+{
+  "select": "channel",
+  "channelId": "{{ $json.channel }}",
+  "text": "{{ $json.slack_report }}",
+  "otherOptions": {
+    "thread_ts": "{{ $json.thread_ts }}"
+  }
+}
+```
+
+**사용 노드**: `n8n-nodes-base.slack v2.2`
+
+### 6. Post Options (Native Slack Node)
+
+JIRA 생성 옵션 표시:
+
+```javascript
+text: $('Extract').item.json.can_auto_fix
+  ? `:jira-new: *${jira_title}*\n:one: JIRA 생성 | :two: JIRA + 자동수정`
+  : `:jira-new: *${jira_title}*\n:one: JIRA 생성`
+```
+
+### 7. Set Context
+
+실행 정보에 옵션 메시지 ts 저장:
 
 ```
-🔍 *장애 분석 결과*
-
-*서비스*: payment-service
-*심각도*: ALERT
-*증상*: High Error Rate (>5%)
-
-*분석*:
-- 10분 전 v2.3.1 배포 후 에러율 급증
-- /api/checkout 엔드포인트에서 TimeoutException 발생
-- 외부 PG사 API 응답 지연 확인
-
-*권장 조치*:
-1. 🔴 즉시: PG사 상태 페이지 확인
-2. 🟡 고려: 타임아웃 임계값 상향 (3s → 5s)
-3. 💬 장기: 서킷브레이커 패턴 도입 검토
-
-:jira: 리액션으로 Jira 티켓 생성
-:wrench: 리액션으로 롤백 실행
+PATCH {N8N_API_URL}/v1/executions/{execution_id}
 ```
+
+```json
+{
+  "options_ts": "<Post Options 메시지 ts>",
+  "reply_channel": "<channel>",
+  "reply_ts": "<thread_ts>",
+  "context": "{\"alert\":{...},\"analysis\":{...},\"can_auto_fix\":true}"
+}
+```
+
+### 8. 리액션 추가 (Native Slack Node)
+
+`:one:` 리액션은 항상 추가:
+
+```json
+{
+  "resource": "reaction",
+  "operation": "add",
+  "name": "one"
+}
+```
+
+`:two:` 리액션은 `can_auto_fix=true`일 때만:
+
+```json
+{
+  "resource": "reaction",
+  "operation": "add",
+  "name": "two"
+}
+```
+
+### 9. 완료 표시 (Native Slack Node)
+
+```javascript
+// Remove Loading
+{ "resource": "reaction", "operation": "remove", "name": "loading" }
+
+// Add Check Mark
+{ "resource": "reaction", "operation": "add", "name": "white_check_mark" }
+```
+
+---
+
+## 에러 처리
+
+### 분석 실패/타임아웃
+
+```javascript
+const text = r.status === 'timeout'
+  ? `:hourglass: Analysis timeout (${p.alert.service})`
+  : `:x: Analysis failed: ${r.error?.message || 'Unknown'}`;
+```
+
+**에러 플로우**:
+1. Remove Loading (`:loading:` 제거)
+2. Add ❌ (`:x:` 추가)
+3. Err Msg (에러 메시지 생성)
+4. Reply Err (스레드에 에러 응답)
 
 ---
 
@@ -172,44 +353,62 @@ Incident Analyzer 에이전트로 라우팅:
 
 ### Placeholder
 
-| Placeholder | 설명 | 예시 |
-|-------------|------|------|
-| `__INCIDENT_CHANNELS__` | 모니터링 채널 ID | `C123,C456,C789` |
-| `__SERVICE_PREFIX__` | 제거할 서비스 접두사 | `myapp.` |
+| Placeholder | 설명 |
+|-------------|------|
+| `__INCIDENT_CHANNELS__` | 인시던트 채널 ID 목록 (콤마 구분) |
+| `__SLACK_CREDENTIAL_ID__` | Slack API 인증 ID |
 
-### 인시던트 채널 찾기
+### n8n 환경변수
 
-```bash
-# slack-cli로 채널 ID 조회
-slack-cli channels "incident"
-```
+| 변수 | 설명 |
+|------|------|
+| `N8N_API_URL` | claudio-api URL |
 
 ---
 
-## 에러 처리
+## Slack 메시지 예시
 
-### 알림 파싱 실패
+### 성공 (can_auto_fix=true)
 
-알 수 없는 형식의 메시지는 무시:
-```javascript
-if (!parsed.service) {
-  // 로깅만 하고 응답하지 않음
-  console.log('Unparseable alert:', text);
-  return [];
-}
+```
+📊 *장애 분석 결과*
+
+*서비스*: payment-service
+*환경*: prod
+*심각도*: ERROR
+
+*분석*:
+- 최근 배포 v2.3.1 이후 에러율 증가
+- TimeoutException 발생 빈도 상승
+- 외부 PG사 응답 지연 확인
+
+*권장 조치*:
+1. 🔴 즉시: PG사 상태 확인
+2. 🟡 고려: 타임아웃 임계값 조정
+3. 💬 장기: 서킷브레이커 도입
 ```
 
-### 분석 타임아웃
-
-장시간 분석이 필요한 경우:
 ```
-"분석 중입니다... (예상 소요: 2분)"
-// 완료 후 별도 메시지
+:jira-new: *[BUG] payment-service - High Error Rate*
+:one: JIRA 생성 | :two: JIRA + 자동수정
+```
+
+### 성공 (can_auto_fix=false)
+
+```
+:jira-new: *[BUG] payment-service - High Error Rate*
+:one: JIRA 생성
+```
+
+### 실패
+
+```
+:x: Analysis failed: API timeout
 ```
 
 ---
 
 ## 연관 워크플로우
 
-- [slack-reaction-handler](slack-reaction-handler.md) — :jira:, :wrench: 리액션 처리
-- [slack-mention-handler](slack-mention-handler.md) — 추가 질문 처리
+- [slack-reaction-handler](slack-reaction-handler.md) — `:one:`, `:two:` 리액션 처리
+- [auto-fix-scheduler](auto-fix-scheduler.md) — `ai:auto-fix` 라벨 티켓 자동 수정

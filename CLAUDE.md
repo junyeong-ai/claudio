@@ -148,6 +148,7 @@ keywords,         // JSON array, exact match
 examples,         // JSON array, for semantic/LLM
 instruction?,     // System prompt
 tools?,           // JSON array, override project tools
+output_schema?,   // JSON Schema for structured output
 timeout,          // Seconds (default 300)
 isolated,         // Run in isolated dir
 static_response,  // Return instruction as-is
@@ -157,8 +158,8 @@ created_at, updated_at
 ### Execution
 ```rust
 id, project, source?, requester?, agent?, instruction?,
-user_message, user_context?, response, model?,
-cost_usd?, input_tokens?, output_tokens?,
+user_message, user_context?, response, structured_output?,
+model?, cost_usd?, input_tokens?, output_tokens?,
 cache_read_tokens?, cache_creation_tokens?,
 duration_ms?, duration_api_ms?, session_id?, metadata?,
 created_at
@@ -205,6 +206,7 @@ request_count, total_cost_usd, primary_source?
 | slack-feedback-handler | Webhook | Feedback collection |
 | user-context-handler | Webhook | User context CRUD |
 | gitlab-mr-review | Schedule (1min) | Auto MR code review |
+| auto-fix-scheduler | Schedule (1min) | JIRA ai:auto-fix label → Auto Fixer |
 
 ### Workflow Placeholders
 
