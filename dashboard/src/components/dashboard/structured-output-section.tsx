@@ -27,7 +27,7 @@ const FIELD_FORMAT_HINTS: Record<string, ContentFormat> = {
   jira_description: 'json',
 };
 
-const PRIORITY_FIELDS = ['verdict', 'success', 'summary', 'slack_message', 'slack_report', 'gitlab_comment'];
+const PRIORITY_FIELDS = ['verdict', 'success', 'summary', 'points', 'slack_message', 'slack_report', 'gitlab_comment'];
 
 function detectFieldFormat(key: string, value: unknown): ContentFormat {
   if (FIELD_FORMAT_HINTS[key]) return FIELD_FORMAT_HINTS[key];
