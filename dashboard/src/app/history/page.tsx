@@ -307,7 +307,7 @@ function HistoryPageContent() {
                     </p>
                     <FeedbackBadge feedback={exec.feedback as 1 | -1 | 0 | null} />
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">{exec.response_preview}</p>
+                  <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1 break-words">{exec.response_preview}</p>
                   <div className="flex items-center gap-2 mb-3 text-xs">
                     {exec.model && <Badge variant="secondary" className="text-xs font-normal">{formatModelName(exec.model)}</Badge>}
                     {exec.cost_usd && <span className="flex items-center gap-1 text-muted-foreground"><DollarSign className="h-3 w-3" />{exec.cost_usd.toFixed(3)}</span>}
