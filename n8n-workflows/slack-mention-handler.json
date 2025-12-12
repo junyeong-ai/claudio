@@ -461,7 +461,7 @@
           "value": "={{ $('Reply').item.json.channel }}"
         },
         "timestamp": "={{ $('Reply').item.json.ts }}",
-        "name": "+1"
+        "name": "thumbsup"
       },
       "id": "add-thumbsup",
       "name": "👍",
@@ -489,7 +489,7 @@
           "value": "={{ $('Reply').item.json.channel }}"
         },
         "timestamp": "={{ $('Reply').item.json.ts }}",
-        "name": "-1"
+        "name": "thumbsdown"
       },
       "id": "add-thumbsdown",
       "name": "👎",
