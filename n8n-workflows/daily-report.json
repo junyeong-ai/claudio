@@ -1,0 +1,418 @@
+{
+  "name": "Daily Reporter",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "10:00 Weekdays",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://__GITLAB_HOST__/api/v4/projects/{{ encodeURIComponent('__GITLAB_PROJECT__') }}/merge_requests",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "state",
+              "value": "all"
+            },
+            {
+              "name": "updated_after",
+              "value": "={{ $now.weekday === 1 ? $now.minus({days: 3}).startOf('day').toISO() : $now.minus({days: 1}).startOf('day').toISO() }}"
+            },
+            {
+              "name": "per_page",
+              "value": "50"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-mrs",
+      "name": "Get MRs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "QHpWT7FE12mKF6m9",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mrs = $('Get MRs').all().map(i => i.json);\n\nconst mrsMerged = mrs.filter(m => m.state === 'merged').map(m => ({ iid: m.iid, title: m.title, author: m.author?.username }));\nconst mrsOpened = mrs.filter(m => m.state === 'opened').map(m => ({ iid: m.iid, title: m.title, author: m.author?.username }));\n\n// Group by author\nconst mergedByAuthor = {};\nconst openedByAuthor = {};\nfor (const m of mrsMerged) {\n  mergedByAuthor[m.author] = (mergedByAuthor[m.author] || 0) + 1;\n}\nfor (const m of mrsOpened) {\n  openedByAuthor[m.author] = (openedByAuthor[m.author] || 0) + 1;\n}\n\nreturn {\n  json: {\n    mrs_merged: mrsMerged,\n    mrs_opened: mrsOpened,\n    merged_by_author: mergedByAuthor,\n    opened_by_author: openedByAuthor,\n    total_merged: mrsMerged.length,\n    total_opened: mrsOpened.length,\n    collected_at: new Date().toISOString()\n  }\n};"
+      },
+      "id": "aggregate-gitlab",
+      "name": "Aggregate GitLab",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/projects/system/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_message: 'Generate daily scrum report. Date: ' + $now.toFormat('yyyy-MM-dd (EEE)'), agent: 'Daily Reporter', source: 'n8n-scheduler', requester: 'daily-report-workflow', metadata: { gitlab_data: $json, workflow_execution_id: $executionId } }) }}",
+        "options": {
+          "timeout": 660000
+        }
+      },
+      "id": "execute",
+      "name": "Execute",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-success",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $('Execute').item.json;\n\n// structured_output이 문자열이면 파싱\nlet output = result.structured_output || {};\nif (typeof output === 'string') {\n  try { output = JSON.parse(output); } catch(e) { output = {}; }\n}\n\n// AI가 Slack mrkdwn으로 직접 생성한 메시지 사용\nconst summaryMessage = output.summary_message || result.response || ':warning: 리포트 생성 실패';\nconst threadMessages = output.thread_messages || [];\n\nreturn { json: { text: summaryMessage, thread_messages: threadMessages, execution_id: result.id } };"
+      },
+      "id": "format-summary",
+      "name": "Format Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__DAILY_REPORT_CHANNEL__"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "unfurl_links": false,
+          "unfurl_media": false,
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "post-summary",
+      "name": "Post Summary",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        200
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const threadMessages = $('Format Summary').item.json.thread_messages || [];\n\n// Slack 노드 응답에서 ts 추출 (여러 가능한 경로 확인)\nconst postSummaryOutput = $('Post Summary').item.json;\nconst summaryTs = postSummaryOutput.ts || postSummaryOutput.message?.ts || '';\n\n// 디버그: ts가 없으면 에러 방지\nif (!summaryTs) {\n  console.log('WARNING: No thread_ts found. Post Summary output:', JSON.stringify(postSummaryOutput));\n}\n\nconst items = threadMessages.map(t => ({\n  json: {\n    text: t.message,\n    thread_ts: summaryTs,\n    assignee: t.assignee\n  }\n}));\n\nreturn items;"
+      },
+      "id": "format-threads",
+      "name": "Format Threads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__DAILY_REPORT_CHANNEL__"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $json.thread_ts }}"
+            }
+          },
+          "unfurl_links": false,
+          "unfurl_media": false,
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "post-threads",
+      "name": "Post Threads",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        200
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'daily-report', execution_id: $('Format Summary').item.json.execution_id, status: 'success', metadata: { thread_count: $('Format Summary').item.json.thread_messages?.length || 0 } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "stats-ok",
+      "name": "Stats OK",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__DAILY_REPORT_CHANNEL__"
+        },
+        "text": "={{ `:x: *Daily Reporter Failed*\\n${$('Execute').item.json.status === 'timeout' ? ':hourglass: Timeout' : ':warning: ' + ($('Execute').item.json.error?.message || 'Unknown error')}` }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "notify-failure",
+      "name": "Notify Failure",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1140,
+        400
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "EkSzKkXs7wbtV6Cs",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/v1/workflows/stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'daily-report', execution_id: $('Execute').item.json.id, status: $('Execute').item.json.status === 'timeout' ? 'timeout' : 'error', metadata: { error: $('Execute').item.json.error?.message } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "stats-err",
+      "name": "Stats Err",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        400
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "10:00 Weekdays": {
+      "main": [
+        [
+          {
+            "node": "Get MRs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get MRs": {
+      "main": [
+        [
+          {
+            "node": "Aggregate GitLab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate GitLab": {
+      "main": [
+        [
+          {
+            "node": "Execute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute": {
+      "main": [
+        [
+          {
+            "node": "Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success?": {
+      "main": [
+        [
+          {
+            "node": "Format Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Summary": {
+      "main": [
+        [
+          {
+            "node": "Post Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Summary": {
+      "main": [
+        [
+          {
+            "node": "Format Threads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Threads": {
+      "main": [
+        [
+          {
+            "node": "Post Threads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Threads": {
+      "main": [
+        [
+          {
+            "node": "Stats OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Failure": {
+      "main": [
+        [
+          {
+            "node": "Stats Err",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

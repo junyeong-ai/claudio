@@ -14,7 +14,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Workflow file names (source of truth)
-WORKFLOW_FILES="slack-mention-handler.json slack-message-handler.json slack-reaction-handler.json slack-feedback-handler.json user-context-handler.json gitlab-mr-review.json auto-fix-scheduler.json"
+WORKFLOW_FILES="slack-mention-handler.json slack-message-handler.json slack-reaction-handler.json slack-feedback-handler.json user-context-handler.json gitlab-mr-review.json auto-fix-scheduler.json daily-report.json"
 
 # Load .env file
 load_env() {
@@ -257,6 +257,7 @@ inject_config() {
     local mr_review_channel=$(jq -r '.mrReviewChannel // ""' "$CONFIG_FILE")
     local system_project=$(jq -r '.systemProject // "system"' "$CONFIG_FILE")
     local auto_fix_reviewer_ids=$(jq -r '.autoFixReviewerIds // ""' "$CONFIG_FILE")
+    local daily_report_channel=$(jq -r '.dailyReportChannel // ""' "$CONFIG_FILE")
 
     # Create temp file with injected values (don't modify original)
     local tmp=$(mktemp)
@@ -289,6 +290,7 @@ inject_config() {
     sed_inplace "s|__SYSTEM_PROJECT__|$system_project|g" "$tmp"
     sed_inplace "s|__MR_REVIEW_CHANNEL__|$mr_review_channel|g" "$tmp"
     sed_inplace "s|__AUTO_FIX_REVIEWER_IDS__|$auto_fix_reviewer_ids|g" "$tmp"
+    sed_inplace "s|__DAILY_REPORT_CHANNEL__|$daily_report_channel|g" "$tmp"
 
     if [ -s "$tmp" ]; then
         echo "$tmp"
