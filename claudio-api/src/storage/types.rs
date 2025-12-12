@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 pub struct Project {
     pub id: String,
     pub name: String,
-    pub working_dir: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -24,7 +23,6 @@ pub struct Project {
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateProject {
     pub name: String,
-    pub working_dir: String,
     pub system_prompt: Option<String>,
     pub allowed_tools: Option<Vec<String>>,
     pub disallowed_tools: Option<Vec<String>>,
@@ -45,7 +43,6 @@ pub struct CreateProject {
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateProject {
     pub name: Option<String>,
-    pub working_dir: Option<String>,
     pub system_prompt: Option<String>,
     pub allowed_tools: Option<Vec<String>>,
     pub disallowed_tools: Option<Vec<String>>,
@@ -88,8 +85,8 @@ pub struct Agent {
     pub output_schema: Option<serde_json::Value>,
     pub timeout: i32,
     pub static_response: bool,
-    #[serde(default)]
-    pub isolated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub working_dir: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -113,8 +110,7 @@ pub struct CreateAgent {
     pub timeout: i32,
     #[serde(default)]
     pub static_response: bool,
-    #[serde(default)]
-    pub isolated: bool,
+    pub working_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -130,7 +126,7 @@ pub struct UpdateAgent {
     pub output_schema: Option<serde_json::Value>,
     pub timeout: Option<i32>,
     pub static_response: Option<bool>,
-    pub isolated: Option<bool>,
+    pub working_dir: Option<String>,
 }
 
 fn default_model() -> String {

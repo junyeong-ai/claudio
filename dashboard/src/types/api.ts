@@ -281,7 +281,6 @@ export interface ClassifyLogsResponse {
 export interface Project {
   id: string;
   name: string;
-  working_dir: string;
   system_prompt?: string;
   allowed_tools?: string[];
   disallowed_tools?: string[];
@@ -311,14 +310,13 @@ export interface Agent {
   output_schema?: JsonSchema;
   timeout: number;
   static_response: boolean;
-  isolated: boolean;
+  working_dir?: string;
   created_at: number;
   updated_at: number;
 }
 
 export interface CreateProject {
   name: string;
-  working_dir: string;
   system_prompt?: string;
   allowed_tools?: string[];
   disallowed_tools?: string[];
@@ -332,7 +330,6 @@ export interface CreateProject {
 
 export interface UpdateProject {
   name?: string;
-  working_dir?: string;
   system_prompt?: string;
   allowed_tools?: string[];
   disallowed_tools?: string[];
@@ -356,7 +353,7 @@ export interface CreateAgent {
   output_schema?: JsonSchema;
   timeout?: number;
   static_response?: boolean;
-  isolated?: boolean;
+  working_dir?: string;
 }
 
 export interface UpdateAgent {
@@ -371,7 +368,7 @@ export interface UpdateAgent {
   output_schema?: JsonSchema;
   timeout?: number;
   static_response?: boolean;
-  isolated?: boolean;
+  working_dir?: string;
 }
 
 export interface ClassifyTestResponse {

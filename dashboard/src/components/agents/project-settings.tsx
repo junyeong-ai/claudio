@@ -66,7 +66,6 @@ function ProjectSettingsContent({
 
   const initialState = useMemo(() => ({
     name: project?.name ?? '',
-    workingDir: project?.working_dir ?? '.',
     systemPrompt: project?.system_prompt ?? '',
     allowedTools: project?.allowed_tools ?? [],
     disallowedTools: project?.disallowed_tools ?? [],
@@ -79,7 +78,6 @@ function ProjectSettingsContent({
   }), [project]);
 
   const [name, setName] = useState(initialState.name);
-  const [workingDir, setWorkingDir] = useState(initialState.workingDir);
   const [systemPrompt, setSystemPrompt] = useState(initialState.systemPrompt);
   const [allowedTools, setAllowedTools] = useState<string[]>(initialState.allowedTools);
   const [disallowedTools, setDisallowedTools] = useState<string[]>(initialState.disallowedTools);
@@ -96,7 +94,6 @@ function ProjectSettingsContent({
     if (isCreate) {
       await onSave({
         name: name.trim(),
-        working_dir: workingDir.trim(),
         system_prompt: systemPrompt.trim() || undefined,
         allowed_tools: allowedTools.length > 0 ? allowedTools : undefined,
         disallowed_tools: disallowedTools.length > 0 ? disallowedTools : undefined,
@@ -110,7 +107,6 @@ function ProjectSettingsContent({
     } else {
       await onSave({
         name: name.trim(),
-        working_dir: workingDir.trim(),
         system_prompt: systemPrompt.trim() || undefined,
         allowed_tools: allowedTools.length > 0 ? allowedTools : undefined,
         disallowed_tools: disallowedTools.length > 0 ? disallowedTools : undefined,
@@ -168,26 +164,15 @@ function ProjectSettingsContent({
               </div>
             )}
 
-            {/* Name & Working Dir */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="project-name">Display Name</Label>
-                <Input
-                  id="project-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="My Project"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="working-dir">Working Directory</Label>
-                <Input
-                  id="working-dir"
-                  value={workingDir}
-                  onChange={(e) => setWorkingDir(e.target.value)}
-                  placeholder="/path/to/project"
-                />
-              </div>
+            {/* Name */}
+            <div className="space-y-2">
+              <Label htmlFor="project-name">Display Name</Label>
+              <Input
+                id="project-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="My Project"
+              />
             </div>
 
             {/* Project Options */}

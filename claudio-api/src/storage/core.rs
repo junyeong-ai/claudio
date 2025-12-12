@@ -143,7 +143,6 @@ impl Storage {
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
-                working_dir TEXT NOT NULL,
                 system_prompt TEXT,
                 allowed_tools TEXT,
                 disallowed_tools TEXT,
@@ -171,7 +170,7 @@ impl Storage {
                 output_schema TEXT,
                 timeout INTEGER NOT NULL DEFAULT 300,
                 static_response INTEGER NOT NULL DEFAULT 0,
-                isolated INTEGER NOT NULL DEFAULT 0,
+                working_dir TEXT,
                 created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
                 updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
                 UNIQUE(project_id, name)

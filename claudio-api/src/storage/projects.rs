@@ -5,23 +5,22 @@ use super::core::{Storage, slugify};
 use super::types::{Agent, CreateAgent, CreateProject, Project, UpdateAgent, UpdateProject};
 
 fn map_project_row(row: &rusqlite::Row) -> rusqlite::Result<Project> {
-    let allowed: Option<String> = row.get(4)?;
-    let disallowed: Option<String> = row.get(5)?;
+    let allowed: Option<String> = row.get(3)?;
+    let disallowed: Option<String> = row.get(4)?;
     Ok(Project {
         id: row.get(0)?,
         name: row.get(1)?,
-        working_dir: row.get(2)?,
-        system_prompt: row.get(3)?,
+        system_prompt: row.get(2)?,
         allowed_tools: allowed.and_then(|s| serde_json::from_str(&s).ok()),
         disallowed_tools: disallowed.and_then(|s| serde_json::from_str(&s).ok()),
-        is_default: row.get::<_, i32>(6)? == 1,
-        enable_user_context: row.get::<_, i32>(7)? == 1,
-        fallback_agent: row.get(8)?,
-        classify_model: row.get(9)?,
-        classify_timeout: row.get(10)?,
-        rate_limit_rpm: row.get(11)?,
-        created_at: row.get(12)?,
-        updated_at: row.get(13)?,
+        is_default: row.get::<_, i32>(5)? == 1,
+        enable_user_context: row.get::<_, i32>(6)? == 1,
+        fallback_agent: row.get(7)?,
+        classify_model: row.get(8)?,
+        classify_timeout: row.get(9)?,
+        rate_limit_rpm: row.get(10)?,
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
     })
 }
 
@@ -44,7 +43,7 @@ fn map_agent_row(row: &rusqlite::Row) -> rusqlite::Result<Agent> {
         output_schema: output_schema.and_then(|s| serde_json::from_str(&s).ok()),
         timeout: row.get(11)?,
         static_response: row.get::<_, i32>(12)? == 1,
-        isolated: row.get::<_, i32>(13)? == 1,
+        working_dir: row.get(13)?,
         created_at: row.get(14)?,
         updated_at: row.get(15)?,
     })
@@ -54,7 +53,7 @@ impl Storage {
     pub fn list_projects(&self) -> Result<Vec<Project>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, name, working_dir, system_prompt, allowed_tools, disallowed_tools, is_default,
+            "SELECT id, name, system_prompt, allowed_tools, disallowed_tools, is_default,
                     enable_user_context, fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at
              FROM projects ORDER BY is_default DESC, name",
         )?;
@@ -69,7 +68,7 @@ impl Storage {
         let conn = self.conn()?;
         let result = conn
             .query_row(
-                "SELECT id, name, working_dir, system_prompt, allowed_tools, disallowed_tools, is_default,
+                "SELECT id, name, system_prompt, allowed_tools, disallowed_tools, is_default,
                         enable_user_context, fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at
                  FROM projects WHERE id = ?1",
                 [id],
@@ -83,7 +82,7 @@ impl Storage {
         let conn = self.conn()?;
         let result = conn
             .query_row(
-                "SELECT id, name, working_dir, system_prompt, allowed_tools, disallowed_tools, is_default,
+                "SELECT id, name, system_prompt, allowed_tools, disallowed_tools, is_default,
                         enable_user_context, fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at
                  FROM projects WHERE is_default = 1 LIMIT 1",
                 [],
@@ -135,10 +134,10 @@ impl Storage {
                 .transpose()?;
 
             conn.execute(
-                "INSERT INTO projects (id, name, working_dir, system_prompt, allowed_tools, disallowed_tools, is_default,
+                "INSERT INTO projects (id, name, system_prompt, allowed_tools, disallowed_tools, is_default,
                                        enable_user_context, fallback_agent, classify_model, classify_timeout, rate_limit_rpm, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                params![id, input.name, input.working_dir, input.system_prompt, allowed, disallowed,
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                params![id, input.name, input.system_prompt, allowed, disallowed,
                         input.is_default as i32, input.enable_user_context as i32, input.fallback_agent, input.classify_model, input.classify_timeout,
                         input.rate_limit_rpm, now, now],
             )?;
@@ -146,7 +145,6 @@ impl Storage {
             Ok(Project {
                 id,
                 name: input.name,
-                working_dir: input.working_dir,
                 system_prompt: input.system_prompt,
                 allowed_tools: input.allowed_tools,
                 disallowed_tools: input.disallowed_tools,
@@ -214,7 +212,6 @@ impl Storage {
             }
 
             add_field!("name = ?", input.name);
-            add_field!("working_dir = ?", input.working_dir);
             add_field!("system_prompt = ?", input.system_prompt);
             add_field!("allowed_tools = ?", input.allowed_tools, json);
             add_field!("disallowed_tools = ?", input.disallowed_tools, json);
@@ -287,7 +284,7 @@ impl Storage {
     pub fn list_agents(&self, project_id: &str) -> Result<Vec<Agent>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, isolated, created_at, updated_at
+            "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, working_dir, created_at, updated_at
              FROM agents WHERE project_id = ?1 ORDER BY priority DESC, name",
         )?;
         let agents = stmt
@@ -301,7 +298,7 @@ impl Storage {
         let conn = self.conn()?;
         let result = conn
             .query_row(
-                "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, isolated, created_at, updated_at
+                "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, working_dir, created_at, updated_at
                  FROM agents WHERE id = ?1",
                 [id],
                 map_agent_row,
@@ -314,7 +311,7 @@ impl Storage {
         let conn = self.conn()?;
         let result = conn
             .query_row(
-                "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, isolated, created_at, updated_at
+                "SELECT id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, working_dir, created_at, updated_at
                  FROM agents WHERE project_id = ?1 AND name = ?2",
                 params![project_id, name],
                 map_agent_row,
@@ -358,9 +355,9 @@ impl Storage {
             .transpose()?;
 
         conn.execute(
-            "INSERT INTO agents (id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, isolated, created_at, updated_at)
+            "INSERT INTO agents (id, project_id, name, description, model, priority, keywords, examples, instruction, tools, output_schema, timeout, static_response, working_dir, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
-            params![id, project_id, input.name, input.description, input.model, input.priority, keywords, examples, input.instruction, tools, output_schema, input.timeout, input.static_response as i32, input.isolated as i32, now, now],
+            params![id, project_id, input.name, input.description, input.model, input.priority, keywords, examples, input.instruction, tools, output_schema, input.timeout, input.static_response as i32, input.working_dir, now, now],
         )?;
 
         Ok(Agent {
@@ -377,7 +374,7 @@ impl Storage {
             output_schema: input.output_schema,
             timeout: input.timeout,
             static_response: input.static_response,
-            isolated: input.isolated,
+            working_dir: input.working_dir,
             created_at: now,
             updated_at: now,
         })
@@ -426,7 +423,7 @@ impl Storage {
         add_field!("tools", input.tools, json);
         add_field!("output_schema", input.output_schema, json);
         add_field!("static_response", input.static_response, bool);
-        add_field!("isolated", input.isolated, bool);
+        add_field!("working_dir", input.working_dir);
 
         params.push(Box::new(id.to_string()));
         let sql = format!("UPDATE agents SET {} WHERE id = ?{}", sets.join(", "), idx);

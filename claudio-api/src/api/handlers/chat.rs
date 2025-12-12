@@ -82,8 +82,8 @@ pub async fn chat_project(
         return Err(ApiError::rate_limit(&project_id));
     }
 
-    let mut is_isolated = false;
     let mut agent_tools: Option<Vec<String>> = None;
+    let mut agent_working_dir: Option<String> = None;
     if let Some(ref agent_name) = req.agent
         && let Ok(Some(agent)) = state.storage.get_agent_by_name(&project_id, agent_name)
     {
@@ -105,16 +105,14 @@ pub async fn chat_project(
             req.output_schema = agent.output_schema;
         }
         agent_tools = agent.tools;
-        is_isolated = agent.isolated;
+        agent_working_dir = agent.working_dir;
     }
 
     if req.working_dir.is_none() {
-        if is_isolated {
-            let config = Config::global();
-            req.working_dir = Some(config.defaults.isolated_dir.clone());
-        } else {
-            req.working_dir = Some(project.working_dir.clone());
-        }
+        let config = Config::global();
+        req.working_dir = Some(
+            agent_working_dir.unwrap_or_else(|| config.defaults.isolated_dir.clone()),
+        );
     }
     if req.allowed_tools.is_none() {
         req.allowed_tools = match (agent_tools, project.allowed_tools.clone()) {
