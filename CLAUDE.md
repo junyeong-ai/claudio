@@ -207,6 +207,7 @@ request_count, total_cost_usd, primary_source?
 | user-context-handler | Webhook | User context CRUD |
 | gitlab-mr-review | Schedule (1min) | Auto MR code review |
 | auto-fix-scheduler | Schedule (1min) | JIRA ai:auto-fix label → Auto Fixer |
+| daily-report | Schedule (weekdays 10am) | Daily scrum report generation |
 
 ### Workflow Placeholders
 
@@ -220,6 +221,8 @@ Config via `.n8n-config.json` (gitignored):
 | `__CLAUDIO_PROJECT__` | project |
 | `__GITLAB_HOST/PROJECT__` | gitlab.host/project |
 | `__JIRA_HOST__` | jira.host |
+| `__DAILY_REPORT_CHANNEL__` | dailyReportChannel |
+| `__MR_REVIEW_CHANNEL__` | mrReviewChannel |
 
 n8n env vars: `N8N_API_URL`, `N8N_DASHBOARD_URL`, `N8N_WEBHOOK_URL`, `MR_REVIEW_CHANNEL`
 
