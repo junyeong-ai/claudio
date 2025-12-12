@@ -217,8 +217,8 @@ function AgentsPageContent() {
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-4">
-        <div className="lg:col-span-3 space-y-4">
+      <div className="grid gap-6 xl:grid-cols-4">
+        <div className="xl:col-span-3 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">
               {projectsLoading ? (
@@ -238,7 +238,7 @@ function AgentsPageContent() {
           </div>
 
           {projectsLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
               {[1, 2, 3, 4, 5, 6].map((i) => (
                 <SkeletonAgentCard key={i} />
               ))}
@@ -250,13 +250,13 @@ function AgentsPageContent() {
               <p className="text-sm">Select or create a project to manage agents</p>
             </motion.div>
           ) : agentsLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
               {[1, 2, 3, 4, 5, 6].map((i) => (
                 <SkeletonAgentCard key={i} />
               ))}
             </div>
           ) : agents && agents.length > 0 ? (
-            <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
               {agents.map((agent) => (
                 <motion.div key={agent.id} variants={staggerItem}>
                   <AgentCard
@@ -281,7 +281,7 @@ function AgentsPageContent() {
           )}
         </div>
 
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ ...transitions.spring, delay: 0.1 }} className="lg:col-span-1">
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ ...transitions.spring, delay: 0.1 }} className="xl:col-span-1">
           <div className="lg:sticky lg:top-6">
             <TestConsole projectId={currentProjectId} />
           </div>
@@ -339,10 +339,10 @@ export default function AgentsPage() {
     <Suspense fallback={
       <div className="space-y-6">
         <div className="h-10" />
-        <div className="grid gap-6 lg:grid-cols-4">
-          <div className="lg:col-span-3 space-y-4">
+        <div className="grid gap-6 xl:grid-cols-4">
+          <div className="xl:col-span-3 space-y-4">
             <div className="h-8" />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
               {[1, 2, 3, 4, 5, 6].map((i) => <SkeletonAgentCard key={i} />)}
             </div>
           </div>
