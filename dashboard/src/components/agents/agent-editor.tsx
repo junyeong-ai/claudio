@@ -91,7 +91,7 @@ function AgentEditorContent({
     priority: agent?.priority ?? 50,
     timeout: agent?.timeout ?? 300,
     staticResponse: agent?.static_response ?? false,
-    isolated: agent?.isolated ?? false,
+    workingDir: agent?.working_dir ?? '',
     instruction: agent?.instruction ?? '',
     keywords: agent?.keywords ?? [],
     examples: agent?.examples ?? [],
@@ -105,7 +105,7 @@ function AgentEditorContent({
   const [priority, setPriority] = useState(initialState.priority);
   const [timeout, setTimeout] = useState(initialState.timeout);
   const [staticResponse, setStaticResponse] = useState(initialState.staticResponse);
-  const [isolated, setIsolated] = useState(initialState.isolated);
+  const [workingDir, setWorkingDir] = useState(initialState.workingDir);
   const [instruction, setInstruction] = useState(initialState.instruction);
   const [keywords, setKeywords] = useState<string[]>(initialState.keywords);
   const [examples, setExamples] = useState<string[]>(initialState.examples);
@@ -139,7 +139,7 @@ function AgentEditorContent({
       priority,
       timeout,
       static_response: staticResponse,
-      isolated,
+      working_dir: workingDir.trim() || undefined,
       instruction: instruction.trim() || undefined,
       keywords,
       examples,
@@ -191,9 +191,9 @@ function AgentEditorContent({
 
         <div className="flex-1 overflow-y-auto mt-4 pr-1">
           <TabsContent value="basic" className="space-y-5 m-0">
-            {/* Name & Model Row */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2 space-y-2">
+            {/* Name & Model Row - 1:1 ratio */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <Label htmlFor="agent-name" required>Agent Name</Label>
                 <Input
                   id="agent-name"
@@ -244,7 +244,7 @@ function AgentEditorContent({
                 onChange={(e) => setDescription(e.target.value)}
                 onBlur={() => markTouched('description')}
                 placeholder="Reviews code for quality, best practices, and potential issues..."
-                rows={3}
+                rows={2}
                 aria-invalid={touched.description && !!validationErrors.description}
                 className={touched.description && validationErrors.description ? 'border-destructive' : ''}
               />
@@ -260,10 +260,24 @@ function AgentEditorContent({
               )}
             </div>
 
-            {/* Priority, Timeout */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Working Directory - full width */}
+            <div className="space-y-2">
+              <Label htmlFor="working-dir">Working Directory</Label>
+              <Input
+                id="working-dir"
+                value={workingDir}
+                onChange={(e) => setWorkingDir(e.target.value)}
+                placeholder="/path/to/project (empty = isolated)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Codebase path. Empty = safe isolated env.
+              </p>
+            </div>
+
+            {/* Priority, Timeout, Static Response - 3 columns */}
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="agent-priority">Priority (0-100)</Label>
+                <Label htmlFor="agent-priority">Priority</Label>
                 <Input
                   id="agent-priority"
                   type="number"
@@ -273,11 +287,11 @@ function AgentEditorContent({
                   max={100}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Higher = checked first
+                  0-100, higher first
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="agent-timeout">Timeout (sec)</Label>
+                <Label htmlFor="agent-timeout">Timeout</Label>
                 <Input
                   id="agent-timeout"
                   type="number"
@@ -287,15 +301,11 @@ function AgentEditorContent({
                   max={600}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Max execution time
+                  Seconds (30-600)
                 </p>
               </div>
-            </div>
-
-            {/* Execution Mode */}
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Response Type</Label>
+                <Label>Response</Label>
                 <div className="flex items-center space-x-2 h-9 px-3 border rounded-md bg-muted/30">
                   <Checkbox
                     id="static-response"
@@ -303,27 +313,11 @@ function AgentEditorContent({
                     onCheckedChange={(checked) => setStaticResponse(checked === true)}
                   />
                   <Label htmlFor="static-response" className="text-sm font-normal cursor-pointer">
-                    Static Response
+                    Static
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Return instruction as-is
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Environment</Label>
-                <div className="flex items-center space-x-2 h-9 px-3 border rounded-md bg-muted/30">
-                  <Checkbox
-                    id="isolated"
-                    checked={isolated}
-                    onCheckedChange={(checked) => setIsolated(checked === true)}
-                  />
-                  <Label htmlFor="isolated" className="text-sm font-normal cursor-pointer">
-                    Isolated
-                  </Label>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Run without working directory
+                  Return as-is
                 </p>
               </div>
             </div>
