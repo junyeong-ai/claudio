@@ -46,20 +46,50 @@ impl ClaudeExecutor {
 
         let working_dir = Path::new(&resolved.working_dir);
         if !working_dir.exists() {
-            return ChatCompletionResponse {
-                id: request_id,
-                status: ExecutionStatus::Failed,
-                created,
-                result: None,
-                structured_output: None,
-                claude_response: None,
-                error: Some(ErrorInfo {
-                    code: "invalid_working_dir".into(),
-                    message: format!("Working directory does not exist: {}", resolved.working_dir),
-                }),
-                project: resolved.name,
-                duration_ms: start.elapsed().as_millis() as u64,
-            };
+            let config = Config::global();
+            let is_isolated = resolved.working_dir == config.defaults.isolated_dir;
+
+            if is_isolated {
+                if let Err(e) = std::fs::create_dir_all(working_dir) {
+                    tracing::error!("Failed to create isolated directory: {}", e);
+                    return ChatCompletionResponse {
+                        id: request_id,
+                        status: ExecutionStatus::Failed,
+                        created,
+                        result: None,
+                        structured_output: None,
+                        claude_response: None,
+                        error: Some(ErrorInfo {
+                            code: "isolated_dir_creation_failed".into(),
+                            message: format!(
+                                "Failed to create isolated directory '{}': {}",
+                                resolved.working_dir, e
+                            ),
+                        }),
+                        project: resolved.name,
+                        duration_ms: start.elapsed().as_millis() as u64,
+                    };
+                }
+                tracing::info!("Created isolated directory: {}", resolved.working_dir);
+            } else {
+                return ChatCompletionResponse {
+                    id: request_id,
+                    status: ExecutionStatus::Failed,
+                    created,
+                    result: None,
+                    structured_output: None,
+                    claude_response: None,
+                    error: Some(ErrorInfo {
+                        code: "invalid_working_dir".into(),
+                        message: format!(
+                            "Working directory does not exist: {}",
+                            resolved.working_dir
+                        ),
+                    }),
+                    project: resolved.name,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                };
+            }
         }
 
         let args = Self::build_args(&req, &resolved);

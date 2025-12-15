@@ -110,9 +110,8 @@ pub async fn chat_project(
 
     if req.working_dir.is_none() {
         let config = Config::global();
-        req.working_dir = Some(
-            agent_working_dir.unwrap_or_else(|| config.defaults.isolated_dir.clone()),
-        );
+        req.working_dir =
+            Some(agent_working_dir.unwrap_or_else(|| config.defaults.isolated_dir.clone()));
     }
     if req.allowed_tools.is_none() {
         req.allowed_tools = match (agent_tools, project.allowed_tools.clone()) {
