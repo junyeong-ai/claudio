@@ -53,7 +53,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const e = $('Webhook').item.json.body;\nconst u = $('Get User Info').item.json?.user || {};\nconst name = u.display_name || u.real_name || u.name || null;\nreturn {\n  json: {\n    channel: e.channel,\n    user: e.user,\n    user_name: name,\n    text: e.text,\n    ts: e.ts,\n    thread_ts: e.thread_ts || e.ts,\n    project: 'capora'\n  }\n};"
+        "jsCode": "const e = $('Webhook').item.json.body;\nconst u = $('Get User Info').item.json?.user || {};\nconst name = u.display_name || u.real_name || u.name || null;\nreturn {\n  json: {\n    channel: e.channel,\n    user: e.user,\n    user_name: name,\n    text: e.text,\n    ts: e.ts,\n    thread_ts: e.thread_ts || e.ts,\n    project: '__CLAUDIO_PROJECT__'\n  }\n};"
       },
       "id": "parse",
       "name": "Parse",

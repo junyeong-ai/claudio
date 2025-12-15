@@ -254,6 +254,12 @@ inject_config() {
     local jira_host=$(jq -r '.jira.host // "__JIRA_HOST__"' "$CONFIG_FILE")
     local jira_email=$(jq -r '.jira.email // ""' "$CONFIG_FILE")
     local jira_api_token=$(jq -r '.jira.apiToken // ""' "$CONFIG_FILE")
+    local jira_project_key=$(jq -r '.jira.projectKey // ""' "$CONFIG_FILE")
+    local jira_project_id=$(jq -r '.jira.projectId // ""' "$CONFIG_FILE")
+    local jira_task_issue_type_id=$(jq -r '.jira.taskIssueTypeId // ""' "$CONFIG_FILE")
+    local jira_start_date_field=$(jq -r '.jira.startDateField // ""' "$CONFIG_FILE")
+    local jira_priority_high=$(jq -r '.jira.priorityHigh // ""' "$CONFIG_FILE")
+    local jira_priority_medium=$(jq -r '.jira.priorityMedium // ""' "$CONFIG_FILE")
     local mr_review_channel=$(jq -r '.mrReviewChannel // ""' "$CONFIG_FILE")
     local system_project=$(jq -r '.systemProject // "system"' "$CONFIG_FILE")
     local auto_fix_reviewer_ids=$(jq -r '.autoFixReviewerIds // ""' "$CONFIG_FILE")
@@ -286,6 +292,12 @@ inject_config() {
     sed_inplace "s|__JIRA_HOST__|$jira_host|g" "$tmp"
     sed_inplace "s|__JIRA_EMAIL__|$jira_email|g" "$tmp"
     sed_inplace "s|__JIRA_API_TOKEN__|$jira_api_token|g" "$tmp"
+    sed_inplace "s|__JIRA_PROJECT_KEY__|$jira_project_key|g" "$tmp"
+    sed_inplace "s|__JIRA_PROJECT_ID__|$jira_project_id|g" "$tmp"
+    sed_inplace "s|__JIRA_TASK_ISSUE_TYPE_ID__|$jira_task_issue_type_id|g" "$tmp"
+    sed_inplace "s|__JIRA_START_DATE_FIELD__|$jira_start_date_field|g" "$tmp"
+    sed_inplace "s|__JIRA_PRIORITY_HIGH__|$jira_priority_high|g" "$tmp"
+    sed_inplace "s|__JIRA_PRIORITY_MEDIUM__|$jira_priority_medium|g" "$tmp"
     sed_inplace "s|__CLAUDIO_PROJECT__|$project|g" "$tmp"
     sed_inplace "s|__SYSTEM_PROJECT__|$system_project|g" "$tmp"
     sed_inplace "s|__MR_REVIEW_CHANNEL__|$mr_review_channel|g" "$tmp"

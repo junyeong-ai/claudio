@@ -170,12 +170,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://42dot.atlassian.net/rest/api/3/issue",
+        "url": "https://__JIRA_HOST__/rest/api/3/issue",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "jiraSoftwareCloudApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ fields: { project: { id: '10588' }, issuetype: { id: '10008' }, summary: $('Extract').item.json.jira_title || '[BUG] Unknown - Incident', description: $('Extract').item.json.jira_description, priority: { name: $('Extract').item.json.priority === 'High' ? 'P1 - High' : 'P2 - Medium' } } }) }}",
+        "jsonBody": "={{ JSON.stringify({ fields: { project: { id: '__JIRA_PROJECT_ID__' }, issuetype: { id: '__JIRA_TASK_ISSUE_TYPE_ID__' }, summary: $('Extract').item.json.jira_title || '[BUG] Unknown - Incident', description: $('Extract').item.json.jira_description, priority: { name: $('Extract').item.json.priority === 'High' ? '__JIRA_PRIORITY_HIGH__' : '__JIRA_PRIORITY_MEDIUM__' } } }) }}",
         "options": {
           "timeout": 30000
         }
@@ -198,7 +198,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const prev = $('Extract').item.json;\nconst r = $input.first().json;\nif (!r.key) return { json: { ...prev, jira_key: null, jira_url: null, error: r.errorMessages?.[0] || r.errors?.summary || 'JIRA creation failed' } };\nconst jira_key = r.key;\nconst jira_url = `https://42dot.atlassian.net/browse/${jira_key}`;\nreturn { json: { ...prev, jira_key, jira_url, error: null, new_jira: true } };"
+        "jsCode": "const prev = $('Extract').item.json;\nconst r = $input.first().json;\nif (!r.key) return { json: { ...prev, jira_key: null, jira_url: null, error: r.errorMessages?.[0] || r.errors?.summary || 'JIRA creation failed' } };\nconst jira_key = r.key;\nconst jira_url = `https://__JIRA_HOST__/browse/${jira_key}`;\nreturn { json: { ...prev, jira_key, jira_url, error: null, new_jira: true } };"
       },
       "id": "parse-new-jira",
       "name": "Parse New JIRA",
@@ -211,7 +211,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const prev = $('Extract').item.json;\nreturn { json: { ...prev, jira_url: `https://42dot.atlassian.net/browse/${prev.jira_key}`, error: null, new_jira: false } };"
+        "jsCode": "const prev = $('Extract').item.json;\nreturn { json: { ...prev, jira_url: `https://__JIRA_HOST__/browse/${prev.jira_key}`, error: null, new_jira: false } };"
       },
       "id": "use-existing-jira",
       "name": "Use Existing JIRA",

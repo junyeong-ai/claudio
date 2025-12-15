@@ -27,7 +27,7 @@
         "operation": "getAll",
         "limit": 5,
         "options": {
-          "jql": "project = TMS AND labels = \"ai:auto-fix\" AND status = BACKLOG ORDER BY created ASC"
+          "jql": "project = __JIRA_PROJECT_KEY__ AND labels = \"ai:auto-fix\" AND status = BACKLOG ORDER BY created ASC"
         }
       },
       "id": "fetch-tickets",
@@ -130,7 +130,7 @@
             "customFieldsValues": [
               {
                 "fieldId": {
-                  "value": "customfield_10015",
+                  "value": "__JIRA_START_DATE_FIELD__",
                   "mode": "id"
                 },
                 "fieldValue": "={{ $json.startDate }}"
@@ -171,7 +171,7 @@
             "customFieldsValues": [
               {
                 "fieldId": {
-                  "value": "customfield_10015",
+                  "value": "__JIRA_START_DATE_FIELD__",
                   "mode": "id"
                 },
                 "fieldValue": "={{ $('Check Status').item.json.startDate }}"
@@ -308,7 +308,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://gitlab.42dot.ai/api/v4/projects/tms%2Fappius/merge_requests",
+        "url": "https://__GITLAB_HOST__/api/v4/projects/__GITLAB_PROJECT_ENCODED__/merge_requests",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "httpHeaderAuth",
         "sendBody": true,

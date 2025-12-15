@@ -24,7 +24,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://gitlab.42dot.ai/api/v4/projects/{{ encodeURIComponent('tms/appius') }}/merge_requests",
+        "url": "=https://__GITLAB_HOST__/api/v4/projects/{{ encodeURIComponent('__GITLAB_PROJECT__') }}/merge_requests",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendQuery": true,
@@ -67,7 +67,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const CONFIG = { GITLAB_HOST: 'gitlab.42dot.ai', GITLAB_PROJECT: 'tms/appius' };\nconst mrs = $input.all().map(i => i.json);\n\nconst toReview = mrs.filter(mr => {\n  const labels = mr.labels || [];\n  const hasInProgress = labels.includes('ai-review::in-progress');\n  const reviewedSha = labels.find(l => l.startsWith('ai-review::sha:'))?.replace('ai-review::sha:', '');\n  return !hasInProgress && reviewedSha !== mr.sha;\n});\n\nif (toReview.length === 0) return [];\n\nconst mr = toReview[0];\nreturn [{\n  json: {\n    mr_iid: mr.iid,\n    mr_title: mr.title,\n    mr_url: mr.web_url,\n    source_branch: mr.source_branch,\n    target_branch: mr.target_branch,\n    author: mr.author?.username,\n    project_path: CONFIG.GITLAB_PROJECT,\n    gitlab_host: CONFIG.GITLAB_HOST,\n    sha: mr.sha,\n    reviewers: (mr.reviewers || []).map(r => r.username),\n    labels: mr.labels || []\n  }\n}];"
+        "jsCode": "const CONFIG = { GITLAB_HOST: '__GITLAB_HOST__', GITLAB_PROJECT: '__GITLAB_PROJECT__' };\nconst mrs = $input.all().map(i => i.json);\n\nconst toReview = mrs.filter(mr => {\n  const labels = mr.labels || [];\n  const hasInProgress = labels.includes('ai-review::in-progress');\n  const reviewedSha = labels.find(l => l.startsWith('ai-review::sha:'))?.replace('ai-review::sha:', '');\n  return !hasInProgress && reviewedSha !== mr.sha;\n});\n\nif (toReview.length === 0) return [];\n\nconst mr = toReview[0];\nreturn [{\n  json: {\n    mr_iid: mr.iid,\n    mr_title: mr.title,\n    mr_url: mr.web_url,\n    source_branch: mr.source_branch,\n    target_branch: mr.target_branch,\n    author: mr.author?.username,\n    project_path: CONFIG.GITLAB_PROJECT,\n    gitlab_host: CONFIG.GITLAB_HOST,\n    sha: mr.sha,\n    reviewers: (mr.reviewers || []).map(r => r.username),\n    labels: mr.labels || []\n  }\n}];"
       },
       "id": "filter-mrs",
       "name": "Filter",
@@ -267,7 +267,7 @@
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "C07HPQBLD9A"
+          "value": "__MR_REVIEW_CHANNEL__"
         },
         "text": "={{ $json.message }}",
         "otherOptions": {
@@ -370,7 +370,7 @@
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "C07HPQBLD9A"
+          "value": "__MR_REVIEW_CHANNEL__"
         },
         "text": "={{ `:x: *MR Review Failed*\\n<${$('Build Prompt').item.json.mr_url}|!${$('Build Prompt').item.json.mr_iid}> ${$('Build Prompt').item.json.mr_title}\\n${$('Success?').item.json.status === 'timeout' ? ':hourglass: Timeout' : ':warning: ' + ($('Success?').item.json.error?.message || 'Unknown error')}` }}",
         "otherOptions": {
