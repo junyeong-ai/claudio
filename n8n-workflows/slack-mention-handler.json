@@ -272,7 +272,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const req = $('Parse').item.json;\nconst cls = $('Static?').item.json;\n\nconst instruction = `[Slack Context]\\n• Channel: ${req.channel}\\n• Thread: ${req.thread_ts}\\n• Guide: 1) Execute immediately if request is clear 2) Check thread/channel if context needed 3) Focus only on request if context is unrelated`;\n\nreturn {\n  json: {\n    ...req,\n    agent: cls.agent || 'general',\n    instruction,\n    user_message: cls.prompt ? `${cls.prompt}\\n\\n${req.text}` : req.text\n  }\n};"
+        "jsCode": "const req = $('Parse').item.json;\nconst cls = $('Static?').item.json;\n\nconst instruction = `[Slack Context]\n• Channel: ${req.channel}\n• Thread: ${req.thread_ts}\n\n## Context Reference Disambiguation\nThis request originates from a Slack thread. Interpret references precisely:\n\n**Current Thread** (\"위의 글\", \"위 내용\", \"방금\", \"저 글\", \"above\", \"earlier\"):\n→ Earlier messages in THIS Slack thread (not visible in prompt)\n→ Action: Use slack-workspace skill to fetch conversations.replies\n\n**Past Sessions** (\"지난번\", \"전에 말했던\", \"저번에\", \"previously\", \"last time\"):\n→ Historical requests in <user_context> Recent Requests\n→ Action: Already provided; use [Detail: URL] for full response if needed\n\n## Execution Guide\n1. Clear request → Execute immediately\n2. Thread context needed → Fetch via slack-workspace first\n3. Past context needed → Reference <user_context>`;\n\nreturn {\n  json: {\n    ...req,\n    agent: cls.agent || 'general',\n    instruction,\n    user_message: cls.prompt ? `${cls.prompt}\\n\\n${req.text}` : req.text\n  }\n};"
       },
       "id": "build-prompt",
       "name": "Build Prompt",
