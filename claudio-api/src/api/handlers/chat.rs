@@ -3,6 +3,7 @@ use axum::{
     extract::{Path, State},
 };
 use chrono::Utc;
+use chrono_tz::Tz;
 use serde::Deserialize;
 
 use crate::api::classify::{self, ClassifyResponse, ClassifySettings};
@@ -265,11 +266,36 @@ fn format_structured_message(
     parts.join("\n\n")
 }
 
+fn format_relative_time(created_at: i64, now: i64) -> String {
+    let diff = now - created_at;
+    match diff {
+        d if d < 0 => "future".to_string(),
+        d if d < 60 => "just now".to_string(),
+        d if d < 3600 => format!("{}m ago", d / 60),
+        d if d < 86400 => format!("{}h ago", d / 3600),
+        d => format!("{}d ago", d / 86400),
+    }
+}
+
 pub fn format_user_context(ctx: &crate::storage::UserContext, user_name: Option<&str>) -> String {
-    let base_url = &Config::global().server.base_url;
+    let config = Config::global();
+    let base_url = &config.server.base_url;
+    let tz: Tz = config.defaults.timezone.parse().unwrap_or_else(|_| {
+        tracing::warn!(
+            "Invalid TZ '{}', falling back to UTC",
+            config.defaults.timezone
+        );
+        chrono_tz::UTC
+    });
+    let now = Utc::now().with_timezone(&tz);
+    let now_ts = now.timestamp();
     let mut parts = Vec::new();
 
-    parts.push(format!("**Today**: {}", Utc::now().format("%Y-%m-%d")));
+    parts.push(format!(
+        "**Now**: {} ({})",
+        now.format("%Y-%m-%d %H:%M"),
+        tz
+    ));
     if let Some(name) = user_name {
         parts.push(format!("**User**: {}", name));
     }
@@ -299,11 +325,12 @@ pub fn format_user_context(ctx: &crate::storage::UserContext, user_name: Option<
             .iter()
             .map(|c| {
                 let ts = chrono::DateTime::from_timestamp(c.created_at, 0)
-                    .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                    .map(|dt| dt.with_timezone(&tz).format("%Y-%m-%d %H:%M").to_string())
                     .unwrap_or_else(|| c.created_at.to_string());
+                let relative = format_relative_time(c.created_at, now_ts);
                 let mut entry = format!(
-                    "### {}\n{}\n[Detail: {}/v1/executions/{}]",
-                    ts, c.user_message, base_url, c.id
+                    "### {} ({})\n{}\n[Detail: {}/v1/executions/{}]",
+                    ts, relative, c.user_message, base_url, c.id
                 );
                 if c.has_negative_feedback
                     && let Some(ref resp) = c.response
