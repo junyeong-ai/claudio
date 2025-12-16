@@ -17,8 +17,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        240,
-        300
+        416,
+        304
       ]
     },
     {
@@ -55,8 +55,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        600,
-        300
+        608,
+        304
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -74,8 +74,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        780,
-        300
+        784,
+        304
       ]
     },
     {
@@ -95,7 +95,7 @@
       "typeVersion": 4.2,
       "position": [
         960,
-        300
+        304
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -118,8 +118,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1140,
-        300
+        1152,
+        304
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -138,8 +138,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1320,
-        300
+        1328,
+        304
       ]
     },
     {
@@ -151,8 +151,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1500,
-        300
+        1504,
+        304
       ]
     },
     {
@@ -172,7 +172,7 @@
       "typeVersion": 4.2,
       "position": [
         1680,
-        300
+        304
       ],
       "onError": "continueRegularOutput"
     },
@@ -204,8 +204,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1860,
-        300
+        1856,
+        304
       ]
     },
     {
@@ -217,8 +217,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2040,
-        200
+        2032,
+        208
       ]
     },
     {
@@ -237,8 +237,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2220,
-        200
+        2208,
+        208
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -257,8 +257,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2400,
-        200
+        2384,
+        208
       ]
     },
     {
@@ -279,8 +279,8 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2580,
-        200
+        2576,
+        208
       ],
       "credentials": {
         "slackApi": {
@@ -305,8 +305,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2760,
-        200
+        2752,
+        208
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -332,8 +332,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2940,
-        200
+        2928,
+        208
       ],
       "onError": "continueRegularOutput"
     },
@@ -353,7 +353,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2040,
+        2032,
         400
       ],
       "credentials": {
@@ -382,7 +382,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2220,
+        2208,
         400
       ],
       "credentials": {
@@ -408,7 +408,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2400,
+        2384,
         400
       ],
       "onError": "continueRegularOutput"

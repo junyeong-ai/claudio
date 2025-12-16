@@ -18,7 +18,7 @@
       "typeVersion": 1.2,
       "position": [
         240,
-        300
+        304
       ]
     },
     {
@@ -35,8 +35,8 @@
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
       "position": [
-        420,
-        300
+        432,
+        304
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -72,8 +72,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        600,
-        300
+        608,
+        304
       ]
     },
     {
@@ -85,8 +85,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        780,
-        300
+        784,
+        304
       ]
     },
     {
@@ -117,7 +117,7 @@
       "typeVersion": 2,
       "position": [
         960,
-        300
+        304
       ]
     },
     {
@@ -151,8 +151,8 @@
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
       "position": [
-        1140,
-        250
+        1152,
+        112
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -193,8 +193,8 @@
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
       "position": [
-        1320,
-        250
+        1328,
+        112
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -217,8 +217,8 @@
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
       "position": [
-        1500,
-        300
+        1504,
+        320
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -236,8 +236,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1680,
-        300
+        1696,
+        320
       ]
     },
     {
@@ -256,8 +256,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1860,
-        300
+        1872,
+        320
       ],
       "onError": "continueRegularOutput"
     },
@@ -270,8 +270,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2040,
-        300
+        2048,
+        320
       ]
     },
     {
@@ -301,8 +301,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        2220,
-        300
+        2224,
+        320
       ]
     },
     {
@@ -323,8 +323,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2760,
-        250
+        2400,
+        192
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -343,8 +343,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2940,
-        250
+        2592,
+        192
       ]
     },
     {
@@ -361,8 +361,8 @@
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
       "position": [
-        3120,
-        250
+        2784,
+        192
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -388,8 +388,8 @@
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
       "position": [
-        2940,
-        250
+        2976,
+        192
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -411,8 +411,8 @@
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
       "position": [
-        3120,
-        250
+        3168,
+        192
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -439,7 +439,7 @@
       "typeVersion": 1,
       "position": [
         2400,
-        400
+        416
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -461,8 +461,8 @@
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
       "position": [
-        2580,
-        400
+        2592,
+        416
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -486,8 +486,8 @@
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
       "position": [
-        2760,
-        400
+        2784,
+        416
       ],
       "credentials": {
         "jiraSoftwareCloudApi": {

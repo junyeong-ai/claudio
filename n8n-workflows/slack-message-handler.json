@@ -14,7 +14,7 @@
       "typeVersion": 2,
       "position": [
         240,
-        300
+        304
       ],
       "webhookId": "slack-message"
     },
@@ -29,8 +29,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        420,
-        300
+        432,
+        304
       ]
     },
     {
@@ -42,8 +42,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        600,
-        300
+        608,
+        304
       ]
     },
     {
@@ -73,8 +73,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        780,
-        300
+        784,
+        304
       ]
     },
     {
@@ -95,7 +95,7 @@
       "typeVersion": 2.2,
       "position": [
         960,
-        300
+        304
       ],
       "credentials": {
         "slackApi": {
@@ -121,8 +121,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1140,
-        300
+        1152,
+        304
       ],
       "onError": "continueRegularOutput"
     },
@@ -153,8 +153,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1320,
-        300
+        1328,
+        304
       ]
     },
     {
@@ -166,8 +166,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1500,
-        250
+        1504,
+        256
       ]
     },
     {
@@ -194,7 +194,7 @@
       "typeVersion": 2.2,
       "position": [
         1680,
-        250
+        256
       ],
       "credentials": {
         "slackApi": {
@@ -226,8 +226,8 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        1860,
-        250
+        1856,
+        256
       ],
       "credentials": {
         "slackApi": {
@@ -252,8 +252,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2040,
-        250
+        2032,
+        256
       ],
       "onError": "continueRegularOutput"
     },
@@ -274,8 +274,8 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2220,
-        200
+        2208,
+        96
       ],
       "credentials": {
         "slackApi": {
@@ -312,8 +312,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        2220,
-        300
+        2208,
+        304
       ]
     },
     {
@@ -333,8 +333,8 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2400,
-        300
+        2448,
+        288
       ],
       "credentials": {
         "slackApi": {
@@ -361,8 +361,8 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2400,
-        250
+        2384,
+        96
       ],
       "credentials": {
         "slackApi": {
@@ -389,8 +389,8 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2580,
-        250
+        2560,
+        96
       ],
       "credentials": {
         "slackApi": {
@@ -417,8 +417,8 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        1500,
-        450
+        1504,
+        464
       ],
       "credentials": {
         "slackApi": {
@@ -446,7 +446,7 @@
       "typeVersion": 2.2,
       "position": [
         1680,
-        450
+        464
       ],
       "credentials": {
         "slackApi": {
@@ -465,8 +465,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1860,
-        450
+        1856,
+        464
       ]
     },
     {
@@ -492,8 +492,8 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        2040,
-        450
+        2032,
+        464
       ],
       "credentials": {
         "slackApi": {
