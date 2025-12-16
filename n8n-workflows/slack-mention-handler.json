@@ -460,7 +460,7 @@
           "mode": "id",
           "value": "={{ $('Reply').item.json.channel }}"
         },
-        "timestamp": "={{ $('Reply').item.json.ts }}",
+        "timestamp": "={{ $('Reply').item.json.message.ts }}",
         "name": "thumbsup"
       },
       "id": "add-thumbsup",
@@ -488,7 +488,7 @@
           "mode": "id",
           "value": "={{ $('Reply').item.json.channel }}"
         },
-        "timestamp": "={{ $('Reply').item.json.ts }}",
+        "timestamp": "={{ $('Reply').item.json.message.ts }}",
         "name": "thumbsdown"
       },
       "id": "add-thumbsdown",
