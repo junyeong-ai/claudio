@@ -436,7 +436,7 @@
         "url": "={{ $env.N8N_API_URL }}/v1/executions/{{ $('Extract Result').item.json.execution_id }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ reply_channel: $json.channel, reply_ts: $json.ts }) }}",
+        "jsonBody": "={{ JSON.stringify({ reply_channel: $json.channel, reply_ts: $json.message.ts }) }}",
         "options": {
           "timeout": 5000
         }
