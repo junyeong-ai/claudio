@@ -37,6 +37,7 @@ pub struct DefaultsConfig {
     pub timeout: u32,
     pub disallowed_tools: Vec<String>,
     pub isolated_dir: String,
+    pub timezone: String,
 }
 
 #[derive(Debug, Clone)]
@@ -102,6 +103,7 @@ impl Config {
                 }),
             isolated_dir: env::var("CLAUDIO_ISOLATED_DIR")
                 .unwrap_or_else(|_| "/tmp/claudio-isolated".into()),
+            timezone: env::var("TZ").unwrap_or_else(|_| "UTC".into()),
         };
 
         let slack = Self::load_slack_config();

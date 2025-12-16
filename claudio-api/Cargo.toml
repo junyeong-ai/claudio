@@ -33,6 +33,7 @@ anyhow.workspace = true
 # Utilities
 uuid.workspace = true
 chrono.workspace = true
+chrono-tz.workspace = true
 tracing = "0.1.43"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 regex = "1.12"
